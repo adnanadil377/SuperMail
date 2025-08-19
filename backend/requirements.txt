@@ -1,0 +1,20 @@
+# Core Django package
+Django
+
+# Optional: Database connector (for PostgreSQL)
+psycopg2-binary
+
+# Optional: Environment variable management
+python-dotenv
+
+# # Optional: Django extensions for development
+# django-extensions>=3.2.3
+
+# # Optional: For handling CORS in APIs
+# django-cors-headers>=4.0.0
+
+# Optional: REST framework (if you're building APIs)
+djangorestframework>=3.14.0
+
+# # Optional: Pillow for image handling
+# Pillow>=10.0.0
