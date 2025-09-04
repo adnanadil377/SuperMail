@@ -11,19 +11,27 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import environ
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Initialise environment variables
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR, ".env.local"))
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+SECRET_KEY = env("DJANGO_SECRET_KEY")
+DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-s^fe0+fqe=)su8(d-8!t43)3i^+!-wvi#mxd&kc!divp_)9^ke'
+# Google OAuth
+CLIENT_SECRETS_FILE = os.path.join(BASE_DIR, env("GOOGLE_CLIENT_SECRETS"))
+SCOPES = env("GOOGLE_SCOPES").split()
+REDIRECT_URI = env("GOOGLE_REDIRECT_URI")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Allow insecure transport in dev
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = env("OAUTHLIB_INSECURE_TRANSPORT", default="0")
+
 
 ALLOWED_HOSTS = []
 
@@ -37,7 +45,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'gmailapi',
+    "django_extensions",
+    'contact_api',
+    "drf_yasg",
+    'rest_framework_simplejwt',
+    'acc_api',
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
