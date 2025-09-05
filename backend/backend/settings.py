@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "django_extensions",
     'contact_api',
     "drf_yasg",
+    'corsheaders',
     'rest_framework_simplejwt',
     'acc_api',
 ]
@@ -65,7 +66,9 @@ REST_FRAMEWORK = {
 #     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # increase refresh token lifetime
 #     # other settings...
 # }
-
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -74,6 +77,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'

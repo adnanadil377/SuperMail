@@ -25,3 +25,4 @@ google-auth-oauthlib
 
 djangorestframework-simplejwt
 django-environ
+django-cors-headers
