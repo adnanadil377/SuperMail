@@ -12,6 +12,10 @@ from django.contrib.auth.models import User
 from .models import GoogleCredentials
 from google.auth.transport.requests import Request
 from rest_framework.permissions import IsAuthenticated
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth import get_user_model
 
 CLIENT_SECRETS_FILE = settings.CLIENT_SECRETS_FILE
 SCOPES = settings.SCOPES
@@ -52,29 +56,41 @@ class GoogleAuthView(APIView):
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI
         )
+        user_id_encoded = urlsafe_base64_encode(force_bytes(request.user.pk))
         auth_url, _ = flow.authorization_url(
             prompt='consent',
-            access_type='offline'
+            access_type='offline',
+            state=user_id_encoded
         )
         # return HttpResponseRedirect(auth_url)
         return Response({"auth_url":auth_url})
 
 
 def oauth2callback(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({"error": "User not authenticated"}, status=401)
+    # get state parameter from request
+    state = request.GET.get('state')
+    if not state:
+        return JsonResponse({"error": "Missing state parameter"}, status=400)
+    
+    try:
+        user_id = urlsafe_base64_decode(state).decode()
+        User = get_user_model()
+        user = User.objects.get(pk=user_id)
+    except Exception:
+        return JsonResponse({"error": "Invalid user in state"}, status=400)
+    
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
+        redirect_uri=REDIRECT_URI,
+        state=state
     )
+    
     flow.fetch_token(authorization_response=request.build_absolute_uri())
     user_creds = flow.credentials
 
-    # Save to file
-    
     GoogleCredentials.objects.update_or_create(
-        user=request.user,
+        user=user,
         defaults={
             "token": user_creds.token,
             "refresh_token": user_creds.refresh_token,
@@ -86,7 +102,7 @@ def oauth2callback(request):
         }
     )
     print("Authentication successful, token saved.")
-    return HttpResponseRedirect("http://localhost:8000/emails")  # <-- or frontend URL
+    return HttpResponseRedirect("http://localhost:8000/emails")
 
 
 class EmailListView(APIView):

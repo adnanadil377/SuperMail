@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import environ
 import os
@@ -58,6 +59,12 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
 }
+
+# SIMPLE_JWT = {
+#     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # increase this to desired time
+#     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # increase refresh token lifetime
+#     # other settings...
+# }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
