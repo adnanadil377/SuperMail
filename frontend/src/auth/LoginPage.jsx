@@ -1,24 +1,28 @@
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useEffect, useState } from "react";
+import useAuth from "./useAuth";
+import { useNavigate } from 'react-router-dom';
+
+
 const LoginPage = () => {
+
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
-    console.log(email)
-    const handleSubmit = () => {
-        axios.post("http://127.0.0.1:8000/user/login/",{
-            username:email,
-            password:password
-        })
-        .then(response=>{
-            console.log('Login success:',response.data)
-        })
-        .catch(error => {
-            console.log("login failed: ", error)
-        })
+    const {login, isAuthenticated} = useAuth()
+    const navigate = useNavigate();
+  
+    const handleSubmit = (e) => {
+      e.preventDefault();
+        login(email, password)
     }
+    useEffect(()=>{
+      if (isAuthenticated) {
+        navigate('/');
+        return;
+    }
+    })
+
   return (
     <div className="flex flex-col md:flex-row min-h-screen font-sans bg-black text-white">
-      {/* Left Panel */}
       <div className="relative w-full md:w-1/2 flex items-center justify-center bg-black">
         <div
           className="absolute inset-0 bg-cover bg-center rounded-br-[40px] md:rounded-br-[80px]"
@@ -112,7 +116,7 @@ const LoginPage = () => {
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-900 to-fuchsia-900 text-white font-medium hover:scale-[1.02] shadow-sm hover:shadow-blue-500/40 transition"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-700 to-fuchsia-700 text-white font-medium hover:scale-[1.02] shadow-sm hover:shadow-blue-500/40 transition"
             >
               Sign In
             </button>
