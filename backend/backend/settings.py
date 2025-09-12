@@ -50,7 +50,6 @@ INSTALLED_APPS = [
     'gmailapi',
     "django_extensions",
     'contact_api',
-    "drf_yasg",
     'corsheaders',
     'rest_framework_simplejwt',
     'acc_api',
