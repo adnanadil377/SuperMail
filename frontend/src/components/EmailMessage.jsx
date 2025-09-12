@@ -2,8 +2,20 @@ import React, { useState } from 'react';
 
 const EmailMessage = ({ email, currentUserEmail }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const isIncoming = email.from !== currentUserEmail;
-
+  
+  // Extract email address from "Name <email@domain.com>" format
+  const extractEmail = (emailString) => {
+    const match = emailString.match(/<(.+?)>/);
+    return match ? match[1] : emailString.trim();
+  };
+  
+  const senderEmail = extractEmail(email.from);
+  const isIncoming = senderEmail !== currentUserEmail;
+  
+  console.log('Sender email:', senderEmail);
+  console.log('Current user email:', currentUserEmail);
+  console.log('Is incoming:', isIncoming);
+  
   const toggleExpand = () => setIsExpanded(prev => !prev);
 
   return (

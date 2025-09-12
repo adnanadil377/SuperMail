@@ -33,17 +33,17 @@ const EmailDisplay = ({ activeContactEmail }) => {
 
   if (!activeContactEmail) {
     return (
-      <div className="w-8/12 ml-1 rounded-4xl bg-gray-800 text-white flex items-center justify-center h-full">
+      <div className="hidden md:w-8/12 md:ml-1 rounded-4xl bg-[#212121] text-white md:flex items-center justify-center h-full">
         <p>Select a contact to view emails.</p>
       </div>
     );
   }
 
   return (
-    <div className='w-8/12 ml-1 rounded-4xl bg-gray-800 text-white flex flex-col h-full'>
+    <div className='w-full md:w-8/12 md:ml-1 rounded-4xl bg-[#212121] text-white flex flex-col h-full'>
       {/* Header */}
-      <div className='flex flex-row justify-between px-5 bg-slate-700 rounded-4xl m-2 shadow-xs'>
-        <div className='text-3xl font-bold p-3'>{activeContactEmail}</div>
+      <div className='flex flex-row justify-between px-5 bg-[#212121] rounded-4xl m-2 shadow-xs'>
+        <div className='text-xl font-bold p-3'>{activeContactEmail}</div>
         <div className='p-4'><EllipsisVertical /></div>
       </div>
 

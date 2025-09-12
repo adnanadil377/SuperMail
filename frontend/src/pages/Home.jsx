@@ -11,7 +11,7 @@ import EmailDisplay from '../components/EmailDisplay';
 const Home = () => {
   const { loading, logout, isAuthenticated } = useAuth();
   const [contacts, setContacts] = useState([]);
-  const [activeContactEmail, setActiveContactEmail] = useState(null);
+  const [activeContactEmail, setActiveContactEmail] = useState(null); // Manages which contact is selected
   const navigate = useNavigate();
 
   // Effect for auth check and fetching the initial contact list
@@ -39,11 +39,12 @@ const Home = () => {
 
   return (
     <div className='flex flex-row h-screen p-1 bg-gray-950 text-white'>
-      <Sidebar onLogout={logout} />
+      <Sidebar onLogout={logout}/>
       <ContactList 
         contacts={contacts} 
         activeContactEmail={activeContactEmail}
         onContactSelect={handleContactSelect}
+        onLogout={logout}
       />
       <EmailDisplay activeContactEmail={activeContactEmail} />
     </div>

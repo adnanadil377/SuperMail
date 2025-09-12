@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Menu, Sidebar } from 'lucide-react';
+import SidebarMob from './SidebarMob';
 
+// A small, reusable component for a single contact
 const ContactItem = ({ contact, isActive, onContactSelect }) => {
   return (
     <li
@@ -15,10 +18,20 @@ const ContactItem = ({ contact, isActive, onContactSelect }) => {
 };
 
 
-const ContactList = ({ contacts, activeContactEmail, onContactSelect }) => {
+const ContactList = ({ contacts, activeContactEmail, onContactSelect, onLogout }) => {
+  const [sidebar, setSidebar] = useState(false)
   return (
-    <div className='w-3/12 rounded-3xl bg-slate-800 text-white overflow-y-auto'>
-      <div className='px-3 my-2'>
+    <div className='w-full md:w-3/12 rounded-3xl bg-[#212121] text-white overflow-y-auto'>
+      <div className='flex md:block px-3 my-2'>
+        <div className='flex md:hidden p-4'>
+          {!sidebar && <Menu onClick={() => setSidebar(true)} />}
+        </div>
+
+        {sidebar && (
+          <div className="fixed inset-0 bg-gray-900 opacity-95 z-40" onClick={() => setSidebar(false)}>
+            <SidebarMob onLogout={onLogout} onClose={() => setSidebar(false)} />
+          </div>
+        )}
         <input 
           type='text' 
           placeholder='Search' 
