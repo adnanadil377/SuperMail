@@ -29,7 +29,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+/backend/credentials.json
 # React / Node
 node_modules/
 /frontend/build
