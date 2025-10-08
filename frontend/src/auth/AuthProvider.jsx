@@ -1,114 +1,153 @@
-import React, { useEffect, useState } from 'react'
-import AuthContext from './AuthContext'
-import axios from 'axios'
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import AuthContext from "./AuthContext";
+import axios from "axios";
 
+// --- Helper: Safe JWT decoder (handles URL-safe base64) ---
 const decodeJwt = (token) => {
-    try {
-        return JSON.parse(atob(token.split('.')[1]));
-    } catch (e) {
-        console.error("Failed to decode JWT:", e);
-        return null;
-    }
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64));
+  } catch (e) {
+    console.error("Failed to decode JWT:", e);
+    return null;
+  }
 };
 
+const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(null);
+  const [refresh, setRefresh] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-const AuthProvider = ({children}) => {
-    const [token, setToken] = useState("")
-    const [refresh, setRefresh] = useState("")
-    const [user, setUser] = useState('')
-    const [role, setRole] = useState("")
-    const [loading, setLoading]= useState(true);
+  // --- Helper: save token + refresh + axios header ---
+  const saveTokens = useCallback((access, refreshToken) => {
+    setToken(access);
+    setRefresh(refreshToken);
+    localStorage.setItem("authToken", access);
+    localStorage.setItem("authRefresh", refreshToken);
+    axios.defaults.headers.common["Authorization"] = `Bearer ${access}`;
+  }, []);
 
-    console.log("auth mounted");
-    const login = async(email,password) => {
-        axios.post("http://127.0.0.1:8000/user/login/",{
-            username:email,
-            password:password
-        })
-        .then(response=>{
-            console.log('Login success:',response.data)
-            setToken(response.data.access)
-            localStorage.setItem('authToken', response.data.access);
-            setRefresh(response.data.refresh)
-            localStorage.setItem('authRefresh', response.data.refresh);
-            axios.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-        })
-        .catch(error => {
-            console.log("login failed: ", error)
-        })
+  // --- Login function ---
+  const login = useCallback(async (username, password) => {
+    try {
+      const response = await axios.post("http://127.0.0.1:8000/user/login/", {
+        username,
+        password,
+      });
+
+      console.log("Login success:", response.data);
+      const { access, refresh } = response.data;
+      saveTokens(access, refresh);
+      const decoded = decodeJwt(access);
+      setUser(decoded);
+    } catch (error) {
+      console.error("Login failed:", error);
     }
-    const refreshAccess = async (refreshToken) => {
-        try {
-            const response = await axios.post("http://127.0.0.1:8000/user/refresh/", {
-                refresh: refreshToken,
-            });
-            const newAccess = response.data.access;
-            localStorage.setItem('authToken', newAccess);
-            setToken(newAccess);
-            return newAccess;
-        } catch (error) {
-            throw new Error("Unable to refresh token");
+  }, [saveTokens]);
+
+  // --- Refresh token function ---
+  const refreshAccess = useCallback(async (refreshToken) => {
+    try {
+      const response = await axios.post(
+        "http://127.0.0.1:8000/user/refresh/",
+        { refresh: refreshToken }
+      );
+      const newAccess = response.data.access;
+      saveTokens(newAccess, refreshToken);
+      return newAccess;
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      throw new Error("Unable to refresh token");
+    }
+  }, [saveTokens]);
+
+  // --- Logout function ---
+  const logout = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setRefresh(null);
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authRefresh");
+    delete axios.defaults.headers.common["Authorization"];
+  }, []);
+
+  // --- Watch token changes to update axios header automatically ---
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    } else {
+      delete axios.defaults.headers.common["Authorization"];
+    }
+  }, [token]);
+
+  // --- On mount: check stored token or refresh if expired ---
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const storedToken = localStorage.getItem("authToken");
+        const storedRefresh = localStorage.getItem("authRefresh");
+
+        if (!storedToken && !storedRefresh) {
+          logout();
+          return;
         }
+
+        if (storedToken) {
+          const decodedUser = decodeJwt(storedToken);
+
+          if (decodedUser && decodedUser.exp * 1000 > Date.now()) {
+            saveTokens(storedToken, storedRefresh);
+            setUser(decodedUser);
+            return;
+          }
+
+          if (storedRefresh) {
+            try {
+              const newAccess = await refreshAccess(storedRefresh);
+              const newDecodedUser = decodeJwt(newAccess);
+              setUser(newDecodedUser);
+            } catch (err) {
+              console.error("Refresh failed:", err);
+              logout();
+            }
+          } else {
+            logout();
+          }
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     };
 
-    const logout = () => {
-        setToken(null);
-        setUser(null);
-        setRefresh('');
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authRefresh');
-        delete axios.defaults.headers.common['Authorization'];
+    initializeAuth();
+
+    return () => {
+      isMounted = false;
     };
+  }, [logout, refreshAccess, saveTokens]);
 
-    useEffect(() => {
-        const initializeAuth = async () => {
-            const storedToken = localStorage.getItem('authToken');
-            const storedRefresh = localStorage.getItem('authRefresh');
-            
-            if (storedToken) {
-                const decodedUser = decodeJwt(storedToken);
-                
-                if (decodedUser && decodedUser.exp * 1000 > Date.now()) {
-                    // Token is valid
-                    setToken(storedToken);
-                    setUser(decodedUser);
-                    axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-                } else if (storedRefresh) {
-                    // Token expired — try refreshing
-                    try {
-                        const newAccess = await refreshAccess(storedRefresh);
-                        const newDecodedUser = decodeJwt(newAccess);
-                        setToken(newAccess);
-                        setUser(newDecodedUser);
-                        axios.defaults.headers.common['Authorization'] = `Bearer ${newAccess}`;
-                    } catch (error) {
-                        console.error("Refresh token failed", error);
-                        logout(); // Clear everything
-                    }
-                } else {
-                    logout();
-                }
-            }    
-            setLoading(false);
-        };
+  // --- Memoized context value ---
+  const contextValue = useMemo(
+    () => ({
+      token,
+      refresh,
+      user,
+      login,
+      logout,
+      loading,
+      isAuthenticated: !!token,
+    }),
+    [token, refresh, user, login, logout, loading]
+  );
 
-        initializeAuth();
-    }, []);
-
-    const context = {
-        token,
-        refresh,
-        user,
-        login,
-        logout,
-        loading,
-        isAuthenticated: !!token,
-    };
   return (
-    <AuthContext.Provider value={context}>
-        {children}
+    <AuthContext.Provider value={contextValue}>
+      {!loading && children}
     </AuthContext.Provider>
-  )
-}
+  );
+};
 
-export default AuthProvider
+export default AuthProvider;

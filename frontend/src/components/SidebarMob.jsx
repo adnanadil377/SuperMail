@@ -1,5 +1,6 @@
 import React from 'react'
 import { LogOut, X } from 'lucide-react';
+import { MessageCircleMore, UserRoundPen  } from 'lucide-react';
 
 const SidebarMob = ({ onLogout, onClose }) => {
   return (
@@ -11,12 +12,12 @@ const SidebarMob = ({ onLogout, onClose }) => {
             <X />
           </button>
         </div>
-        <div className='bg-purple-700 rounded-2xl px-2 py-2 mb-2 text-center'>
-          <div>💬</div>
+        <div className='bg-blue-900 rounded-2xl px-2 py-2 mb-2 text-center'>
+          <center><MessageCircleMore /></center>
           <div>Chats</div>
         </div>
-        <div className='bg-purple-700 rounded-2xl px-2 py-2 mb-2 text-center'>
-          <div>👤</div>
+        <div className='rounded-2xl px-2 py-2 mb-2 text-center'>
+          <center><UserRoundPen /></center>
           <div>Profile</div>
         </div>
       </div>
