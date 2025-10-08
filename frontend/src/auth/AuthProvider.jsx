@@ -53,6 +53,7 @@ const AuthProvider = ({ children }) => {
         "http://127.0.0.1:8000/user/refresh/",
         { refresh: refreshToken }
       );
+      axios.defaults.headers.common["Authorization"] = `Bearer ${response.data.access}`
       const newAccess = response.data.access;
       saveTokens(newAccess, refreshToken);
       return newAccess;
@@ -80,7 +81,44 @@ const AuthProvider = ({ children }) => {
       delete axios.defaults.headers.common["Authorization"];
     }
   }, [token]);
-
+useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      response => response,
+      async error => {
+        const originalRequest = error.config;
+        // If 401 and not already retried
+        if (
+          error.response &&
+          error.response.status === 401 &&
+          !originalRequest._retry
+        ) {
+          originalRequest._retry = true;
+          const refreshToken = localStorage.getItem("authRefresh");
+          if (refreshToken) {
+            try {
+              const response = await axios.post(
+                "http://127.0.0.1:8000/user/refresh/",
+                { refresh: refreshToken }
+              );
+              const newAccess = response.data.access;
+              // Save new token
+              localStorage.setItem("authToken", newAccess);
+              axios.defaults.headers.common["Authorization"] = `Bearer ${newAccess}`;
+              originalRequest.headers["Authorization"] = `Bearer ${newAccess}`;
+              return axios(originalRequest); // Retry original request
+            } catch (refreshError) {
+              // Refresh failed, logout
+              logout();
+            }
+          } else {
+            logout();
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => axios.interceptors.response.eject(interceptor);
+  }, [logout]);
   // --- On mount: check stored token or refresh if expired ---
   useEffect(() => {
     let isMounted = true;
