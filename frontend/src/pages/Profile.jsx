@@ -1,6 +1,6 @@
 import React from 'react'
 
-const ContactManager = () => {
+const Profile = () => {
   return (
     <div className='text-white'>
         <form>
@@ -14,4 +14,4 @@ const ContactManager = () => {
   )
 }
 
-export default ContactManager
+export default Profile

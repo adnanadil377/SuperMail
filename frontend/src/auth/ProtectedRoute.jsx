@@ -20,12 +20,10 @@ const ProtectedRoute = ({ redirectPath = "/login", children }) => {
     );
   }
 
-  // If not authenticated, redirect to login (or custom path)
   if (!isAuthenticated) {
     return <Navigate to={redirectPath} replace />;
   }
 
-  // Authenticated: render children if passed, else default layout with Sidebar + nested route
   return children ? (
     children
   ) : (
