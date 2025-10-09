@@ -20,10 +20,10 @@ from django.contrib.auth import get_user_model
 CLIENT_SECRETS_FILE = settings.CLIENT_SECRETS_FILE
 SCOPES = settings.SCOPES
 REDIRECT_URI = settings.REDIRECT_URI
-
 user_creds = None
 
 def get_google_credentials(user):
+    print(REDIRECT_URI)
     token = GoogleCredentials.objects.get(user=user)
     user_creds = Credentials(
         token=token.token,
@@ -102,7 +102,7 @@ def oauth2callback(request):
         }
     )
     print("Authentication successful, token saved.")
-    return HttpResponseRedirect("http://localhost:8000/emails")
+    return HttpResponseRedirect("http://localhost:5173/settings/connect?google_auth=success")
 
 
 class EmailListView(APIView):
