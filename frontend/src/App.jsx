@@ -3,8 +3,11 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import MainLayout from './MainLayout';
 import LoginPage from './auth/LoginPage';
-import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import ProtectedRoute from './auth/ProtectedRoute';
+import Connect from './pages/Connect';
+import Contacts from './pages/Contacts';
+import Profile from './pages/Profile';
 
 const App = () => {
   return (
@@ -14,7 +17,11 @@ const App = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Home/>} />
-            <Route path="/Profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />}>
+              <Route path="connect" element={<Connect />} />
+              <Route path="contacts" element={<Contacts />} />
+              <Route path="profile" element={<Profile />} />
+            </Route>
           </Route>
         </Route>
       </Routes>
