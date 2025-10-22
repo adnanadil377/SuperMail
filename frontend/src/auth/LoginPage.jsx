@@ -1,45 +1,42 @@
-import React, { useEffect, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import useAuth from "./useAuth";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
+const LoginPage = memo(() => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-const LoginPage = () => {
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
-    const {login, isAuthenticated} = useAuth()
-    const navigate = useNavigate();
-  
-    const handleSubmit = (e) => {
-      e.preventDefault();
-        login(email, password)
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    await login(username, password);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/");
     }
-    useEffect(()=>{
-      if (isAuthenticated) {
-        navigate('/');
-        return;
-    }
-    })
+  }, [isAuthenticated, navigate]);
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen font-sans bg-black text-white">
+      {/* Left Image Panel */}
       <div className="relative w-full md:w-1/2 flex items-center justify-center bg-black">
         <div
           className="absolute inset-0 bg-cover bg-center rounded-br-[40px] md:rounded-br-[80px]"
-          style={{
-            // backgroundImage: "url('./login-bg.webp')",
-            zIndex: 0,
-            opacity: 0.7,
-          }}
+          style={{ zIndex: 0, opacity: 0.7 }}
         >
-            <img
-                src="./login-bg.webp"
-                alt="Login background"
-                className="w-full h-full object-cover"
-            />
+          <img
+            src="./login-bg.webp"
+            alt="Login background"
+            className="w-full h-full object-cover"
+          />
         </div>
-
-            
       </div>
 
       {/* Right Panel */}
@@ -66,18 +63,18 @@ const LoginPage = () => {
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
               <label
-                htmlFor="email"
+                htmlFor="username"
                 className="block text-sm font-medium text-gray-300 mb-1"
               >
-                Email
+                Username
               </label>
               <input
                 type="text"
-                id="email"
-                placeholder="Enter your email"
+                id="username"
+                placeholder="Enter your username"
                 className="w-full px-4 py-3 border border-gray-700 rounded-xl bg-black text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                value={email}
-                onChange={(e)=>setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
             </div>
 
@@ -99,7 +96,7 @@ const LoginPage = () => {
                 placeholder="Enter your password"
                 className="w-full px-4 py-3 border border-gray-700 rounded-xl bg-black text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
                 value={password}
-                onChange={(e)=>setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
               />
             </div>
 
@@ -116,9 +113,12 @@ const LoginPage = () => {
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-blue-800 text-white font-medium hover:scale-[1.01] shadow-sm hover:shadow-blue-500/40 transition"
+              disabled={loading}
+              className={`w-full py-3 rounded-xl bg-blue-800 text-white font-medium hover:scale-[1.01] shadow-sm hover:shadow-blue-500/40 transition ${
+                loading ? "opacity-60 cursor-not-allowed" : ""
+              }`}
             >
-              Sign In
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
@@ -133,6 +133,6 @@ const LoginPage = () => {
       </div>
     </div>
   );
-};
+});
 
 export default LoginPage;

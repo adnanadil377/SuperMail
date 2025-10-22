@@ -1,32 +1,56 @@
-import React from 'react';
-import { LogOut } from 'lucide-react';
-import { MessageCircleMore, UserRoundPen  } from 'lucide-react';
+import React from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { LogOut, MessageCircleMore, UserRoundPen } from "lucide-react";
 
 const Sidebar = ({ onLogout }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if the path is active
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`);
+
+  const navItems = [
+    { path: "/", label: "Chats", icon: <MessageCircleMore /> },
+    { path: "/settings", label: "Profile", icon: <UserRoundPen /> },
+  ];
+
   return (
-    <div className='hidden min-w-15 flex-col p-2 md:flex justify-between'>
+    <aside className="hidden md:flex flex-col justify-between min-w-15 p-2">
+      {/* Top Section */}
       <div>
-        <div className='rounded-2xl px-2 py-2 mb-2 text-center'>
-          <div className='text-3xl'>🌀</div>
-          {/* <div>Chats</div> */}
+        {/* Logo */}
+        <div className="mb-2 rounded-2xl px-2 py-2 text-center text-3xl">
+          🌀
         </div>
-        <div className='bg-blue-900 rounded-2xl px-2 py-2 mb-2 text-center'>
-          <center><MessageCircleMore /></center>
-          <div>Chats</div>
-        </div>
-        <div className='rounded-2xl px-2 py-2 mb-2 text-center'>
-          <center><UserRoundPen /></center>
-          <div>Profile</div>
-        </div>
+
+        {/* Navigation */}
+        {navItems.map(({ path, label, icon }) => (
+          <div
+            key={path}
+            onClick={() => navigate(path)}
+            className={`mb-2 cursor-pointer rounded-2xl px-2 py-2 text-center transition-all ${
+              isActive(path)
+                ? "bg-blue-700 text-white"
+                : "text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            <center>{icon}</center>
+            <div>{label}</div>
+          </div>
+        ))}
       </div>
-      <div>
-        <button onClick={onLogout} className='bg-red-500 text-white p-2 rounded-lg w-full'>
-            <center>
-                <LogOut size={18} />
-            </center>
-        </button>
-      </div>
-    </div>
+
+      {/* Logout */}
+      <button
+        onClick={onLogout}
+        className="w-full rounded-lg bg-red-500 p-2 text-white transition-all hover:bg-red-600"
+      >
+        <center>
+          <LogOut size={18} />
+        </center>
+      </button>
+    </aside>
   );
 };
 

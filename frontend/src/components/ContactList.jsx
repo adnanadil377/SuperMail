@@ -12,7 +12,7 @@ const ContactItem = ({ contact, isActive, onContactSelect }) => {
       }`}
     >
       <div className="font-bold">{contact.name}</div>
-      <div className="text-sm text-gray-400">{contact.email}</div>
+      <div className="text-sm text-gray-400 overflow-clip">{contact.email}</div>
     </li>
   );
 };
