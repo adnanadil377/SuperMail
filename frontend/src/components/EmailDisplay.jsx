@@ -7,22 +7,30 @@ import useAuth from '../auth/useAuth';
 const EmailDisplay = ({ activeContactEmail }) => {
   const [emails, setEmails] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null); // Add error state
   const { user } = useAuth();
 
   useEffect(() => {
     // Don't fetch if no contact is selected
     if (!activeContactEmail) {
       setEmails([]);
+      setError(null); // Clear error when no contact is selected
       return;
     }
 
     const fetchEmails = async () => {
       setIsLoading(true);
+      setError(null); // Reset error before fetching
       try {
         const response = await axios.get(`http://127.0.0.1:8000/emails/?email=${activeContactEmail}`);
         setEmails(response.data.emails);
       } catch (error) {
         console.error("Failed to fetch email data:", error);
+        setError(
+          error.response?.status === 401
+            ? "You are not authorized. Please log in again."
+            : "Failed to fetch emails. Please try again."
+        );
       } finally {
         setIsLoading(false);
       }
@@ -46,6 +54,13 @@ const EmailDisplay = ({ activeContactEmail }) => {
         <div className='text-xl font-bold p-3'>{activeContactEmail}</div>
         <div className='p-4'><EllipsisVertical /></div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-600 text-white p-2 m-2 rounded text-center">
+          {error}
+        </div>
+      )}
 
       {/* Scrollable Email List */}
       <div className='flex-grow overflow-y-auto p-2'>

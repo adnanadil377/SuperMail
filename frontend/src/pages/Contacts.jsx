@@ -31,6 +31,18 @@ const Contacts = () => {
 
     }, []);
 
+    // Add this function to refresh contacts after creation
+    const refreshContacts = () => {
+        axios.get("http://127.0.0.1:8000/contactapi/contacts/")
+        .then(response => {
+            setContacts(response.data);
+        })
+        .catch(error => {
+            console.error("Failed to fetch contacts:", error);
+            setError(error)
+        });
+    };
+
     const CreateModal = ({ setEditingContact, onCreated }) => {
         const [contactData, setContactData] = useState({
             name: "",
@@ -46,8 +58,9 @@ const Contacts = () => {
         const handleSubmit = async (e) => {
             e.preventDefault();
             try {
-                await axios.post("http://127.0.0.1:8000/contactapi/contacts/", contactData);
-                onCreated?.(); // refresh parent list if provided
+                const res = await axios.post("http://127.0.0.1:8000/contactapi/contacts/", contactData);
+                // Add the new contact to the list immediately
+                onCreated?.(res.data); // pass the new contact to parent
                 setEditingContact(false); // close modal
             } catch (err) {
                 console.error("Failed to create contact:", err);
@@ -112,32 +125,38 @@ const Contacts = () => {
         );
     };
 
+  // Handler to add new contact to the list
+  const handleContactCreated = (newContact) => {
+    setContacts(prev => [newContact, ...prev]);
+  };
 
   return (
     <div className='w-full md:ml-1 rounded-4xl bg-[#212121] text-white flex flex-col h-full p-5'>
         <h2 className="text-4xl font-bold mb-4">Contacts</h2>
         <button className='bg-blue-400 w-40 p-2 rounded-2xl cursor-pointer' onClick={()=>setEditingContact(true)}>Create New Contact</button>
-        {error ? (
-            <div>error</div>
-         ) : (
-         <div>
-            {contacts.length > 0 ? (
-        <ul>
-          {contacts.map(c => (
-            <ContactItem 
-              key={c.id} 
-              contact={c}
-            />
-                ))}
-                </ul>
+        <div className='overflow-auto'>
+            {error ? (
+                <div>error</div>
             ) : (
-                <p className="text-center p-4">Loading contacts...</p>
+            <div>
+                {contacts.length > 0 ? (
+            <ul>
+            {contacts.map(c => (
+                <ContactItem 
+                key={c.id} 
+                contact={c}
+                />
+                    ))}
+            </ul>
+                ) : (
+                    <p className="text-center p-4">Loading contacts...</p>
+                )}
+            </div>
             )}
-         </div>
-         )}
-         {editingContact && (
-            <CreateModal setEditingContact={setEditingContact}/>
-         )}
+            {editingContact && (
+                <CreateModal setEditingContact={setEditingContact} onCreated={handleContactCreated}/>
+            )}
+        </div>
     </div>
   )
 }
