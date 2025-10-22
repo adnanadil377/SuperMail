@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import GoogleAuthView, EmailListView, oauth2callback
+from .views import GoogleAuthView, EmailListView, SendEmailView, oauth2callback
 
 urlpatterns = [
     path("auth/", GoogleAuthView.as_view(), name="google_auth"),
@@ -7,4 +7,5 @@ urlpatterns = [
     path("oauth2callback/",oauth2callback , name="oauth_callback"),
     path("emails/", EmailListView.as_view(), name="emails"),
     path("emails/", EmailListView.as_view(), name="emails_filtered"),
+    path("send/", SendEmailView.as_view(), name="send_email"),
 ]

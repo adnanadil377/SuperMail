@@ -9,8 +9,8 @@ class GoogleCredentials(models.Model):
     token = models.TextField()
     refresh_token = models.TextField(blank=True, null=True)
     token_uri = models.TextField()
-    client_id = models.TextField()
-    client_secret = models.TextField()
+    # client_id = models.TextField()
+    # client_secret = models.TextField()
     scopes = models.TextField()
     expiry = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
@@ -21,8 +21,8 @@ class GoogleCredentials(models.Model):
             "token": self.token,
             "refresh_token": self.refresh_token,
             "token_uri": self.token_uri,
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
+            # "client_id": self.client_id,
+            # "client_secret": self.client_secret,
             "scopes": json.loads(self.scopes) if isinstance(self.scopes, str) else self.scopes,
             "expiry": self.expiry,
         }

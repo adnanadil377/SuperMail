@@ -1,32 +1,60 @@
-import React, { memo, useEffect, useState } from "react";
-import useAuth from "./useAuth";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
-const LoginPage = memo(() => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+const BASE_URL = "http://127.0.0.1:8000"; // Change if needed
+
+const Signup = () => {
+  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '' });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleChange = e => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async e => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    // 1. Check if passwords match
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    // 2. Check for password length
+    if (form.password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
     setLoading(true);
-    await login(username, password);
+    try {
+      await axios.post(`${BASE_URL}/user/register/`, {
+        username: form.username,
+        password: form.password
+      });
+      setSuccess('Signup successful! You can now log in.');
+      setForm({ username: '', password: '', confirmPassword: '' });
+      setTimeout(() => navigate('/login'), 1500); // Redirect after 1.5s
+    } catch (err) {
+      setError(
+        err.response?.data?.username?.[0] ||
+        err.response?.data?.password?.[0] ||
+        'Signup failed'
+      );
+    }
     setLoading(false);
   };
 
-  const handleSignupClick = (e) => {
+  const handleLoginClick = (e) => {
     e.preventDefault();
-    navigate("/signup");
+    navigate('/login');
   };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/");
-    }
-  }, [isAuthenticated, navigate]);
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen font-sans bg-black text-white">
@@ -57,12 +85,16 @@ const LoginPage = memo(() => {
           {/* Welcome Text */}
           <div>
             <h2 className="text-3xl font-bold text-center text-white">
-              Welcome Back
+              Create Account
             </h2>
             <p className="text-center text-sm text-gray-400 mt-2">
-              Enter your email and password to access your account
+              Enter your username and password to sign up
             </p>
           </div>
+
+          {/* Error/Success */}
+          {error && <div className="text-red-400 mb-3">{error}</div>}
+          {success && <div className="text-green-400 mb-3">{success}</div>}
 
           {/* Form */}
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -76,44 +108,50 @@ const LoginPage = memo(() => {
               <input
                 type="text"
                 id="username"
+                name="username"
                 placeholder="Enter your username"
                 className="w-full px-4 py-3 border border-gray-700 rounded-xl bg-black text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={form.username}
+                onChange={handleChange}
+                required
               />
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-medium text-gray-300"
-                >
-                  Password
-                </label>
-                <a href="#" className="text-sm text-blue-400 hover:underline">
-                  Forgot Password?
-                </a>
-              </div>
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-gray-300 mb-1"
+              >
+                Password
+              </label>
               <input
                 type="password"
                 id="password"
+                name="password"
                 placeholder="Enter your password"
                 className="w-full px-4 py-3 border border-gray-700 rounded-xl bg-black text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={form.password}
+                onChange={handleChange}
+                required
               />
             </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="remember"
-                className="accent-blue-500 bg-black border-gray-600"
-              />
-              <label htmlFor="remember" className="text-sm text-gray-400">
-                Remember me
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="text-sm font-medium text-gray-300 mb-1"
+              >
+                Confirm Password
               </label>
+              <input
+                type="password"
+                id="confirmPassword"
+                name="confirmPassword"
+                placeholder="Confirm your password"
+                className="w-full px-4 py-3 border border-gray-700 rounded-xl bg-black text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+                value={form.confirmPassword}
+                onChange={handleChange}
+                required
+              />
             </div>
 
             <button
@@ -123,25 +161,25 @@ const LoginPage = memo(() => {
                 loading ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Signing up..." : "Sign Up"}
             </button>
           </form>
 
-          {/* Sign Up Prompt */}
+          {/* Login Prompt */}
           <p className="text-sm text-center text-gray-400">
-            Don’t have an account?{" "}
+            Already have an account?{" "}
             <a
               href="#"
               className="text-blue-400 font-medium hover:underline"
-              onClick={handleSignupClick}
+              onClick={handleLoginClick}
             >
-              Sign Up
+              Log In
             </a>
           </p>
         </div>
       </div>
     </div>
   );
-});
+};
 
-export default LoginPage;
+export default Signup;

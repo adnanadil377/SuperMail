@@ -67,7 +67,7 @@ const EmailDisplay = ({ activeContactEmail }) => {
         {isLoading ? (
             <p>Loading emails...</p>
         ) : (
-            emails.map((email) => (
+            emails.slice().reverse().map((email) => (
                 <EmailMessage key={email.message_id} email={email} currentUserEmail={user?.email} />
             ))
         )}

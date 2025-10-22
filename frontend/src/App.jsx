@@ -8,6 +8,7 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import Connect from './pages/Connect';
 import Contacts from './pages/Contacts';
 import Profile from './pages/Profile';
+import Signup from './auth/Signup';
 
 const App = () => {
   return (
@@ -15,6 +16,7 @@ const App = () => {
       <Routes>
         <Route element={<MainLayout />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<Signup />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Home/>} />
             <Route path="/settings" element={<Settings />}>
