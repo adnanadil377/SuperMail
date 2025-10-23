@@ -1,79 +1,95 @@
-from datetime import timezone
+# views.py
+
 import base64
+import logging
+from datetime import timezone, timedelta
+
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse, HttpResponseRedirect
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from email.mime.text import MIMEText
+
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from django.contrib.auth.models import User
-from .models import GoogleCredentials
 from google.auth.transport.requests import Request
-from rest_framework.permissions import IsAuthenticated
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_decode
-from django.contrib.auth import get_user_model
-from django.core.exceptions import ObjectDoesNotExist
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
-import logging
+
+from .models import GoogleCredentials
 
 logger = logging.getLogger(__name__)
 
+# --- Configuration loaded from settings.py ---
 CLIENT_SECRETS_FILE = settings.CLIENT_SECRETS_FILE
 SCOPES = settings.SCOPES
 REDIRECT_URI = settings.REDIRECT_URI
-user_creds = None
+
 
 def get_google_credentials(user):
-    print(REDIRECT_URI)
-    token = GoogleCredentials.objects.get(user=user)
-    user_creds = Credentials(
-        token=token.token,
-        refresh_token=token.refresh_token,
-        token_uri=token.token_uri,
-        client_id=token.client_id,
-        client_secret=token.client_secret,
-        scopes=token.scopes.split(),
+    """
+    Retrieves and refreshes Google credentials for a given user from the database.
+    Application-specific secrets (client_id, client_secret) are loaded from settings.
+    """
+    token_obj = GoogleCredentials.objects.get(user=user)
+    
+    creds = Credentials(
+        token=token_obj.token,
+        refresh_token=token_obj.refresh_token,
+        token_uri=token_obj.token_uri,
+        client_id=settings.GOOGLE_CLIENT_ID,  # Loaded from settings for security
+        client_secret=settings.GOOGLE_CLIENT_SECRET,  # Loaded from settings
+        scopes=token_obj.scopes.split(),
     )
 
-    # Refresh if expired
-    if user_creds.expired and user_creds.refresh_token:
-        user_creds.refresh(Request())
-        # Update DB
-        token.token = user_creds.token
-        token.expiry = user_creds.expiry
-        token.save()
+    # If credentials have expired, refresh them and update the database
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        token_obj.token = creds.token
+        token_obj.expiry = creds.expiry
+        token_obj.save(update_fields=['token', 'expiry'])
+        logger.info(f"Refreshed token for user {user.pk}")
 
-    return user_creds
+    return creds
 
 
 class GoogleAuthView(APIView):
     """
-    Step 1: Redirects user to Google's OAuth consent page.
+    Step 1: Redirects the user to Google's OAuth consent page.
     """
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE,
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI
         )
+        
+        # Encode the user's ID to securely pass it through the OAuth flow
         user_id_encoded = urlsafe_base64_encode(force_bytes(request.user.pk))
+        
         auth_url, _ = flow.authorization_url(
             prompt='consent',
             access_type='offline',
             state=user_id_encoded
         )
-        # return HttpResponseRedirect(auth_url)
-        return Response({"auth_url":auth_url})
+        return Response({"auth_url": auth_url})
 
 
 def oauth2callback(request):
-    # get state parameter from request
+    """
+    Step 2: Handles the callback from Google after user consent.
+    Exchanges the authorization code for credentials and saves them.
+    """
     state = request.GET.get('state')
     if not state:
         return JsonResponse({"error": "Missing state parameter"}, status=400)
@@ -82,7 +98,7 @@ def oauth2callback(request):
         user_id = urlsafe_base64_decode(state).decode()
         User = get_user_model()
         user = User.objects.get(pk=user_id)
-    except Exception:
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
         logger.error("Invalid user in state during OAuth callback")
         return JsonResponse({"error": "Invalid user in state"}, status=400)
     
@@ -95,35 +111,54 @@ def oauth2callback(request):
     
     try:
         flow.fetch_token(authorization_response=request.build_absolute_uri())
-        user_creds = flow.credentials
+        creds = flow.credentials
 
+        # Save the user-specific credentials to the database
         GoogleCredentials.objects.update_or_create(
             user=user,
             defaults={
-                "token": user_creds.token,
-                "refresh_token": user_creds.refresh_token,
-                "token_uri": user_creds.token_uri,
-                "client_id": user_creds.client_id,
-                "client_secret": user_creds.client_secret,
-                "scopes": " ".join(user_creds.scopes),
-                "expiry": user_creds.expiry if user_creds.expiry else timezone.now() + timezone.timedelta(hours=1),
+                "token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": creds.token_uri,
+                "scopes": " ".join(creds.scopes),
+                "expiry": creds.expiry,
             }
         )
-        logger.info("Authentication successful, token saved.")
+        logger.info(f"Authentication successful for user {user.pk}, token saved.")
+
+        # Update the user's email address from Gmail profile
+        from googleapiclient.discovery import build
+
+        try:
+            # Build Gmail service with the new credentials
+            service = build("gmail", "v1", credentials=creds)
+            profile = service.users().getProfile(userId="me").execute()
+            gmail_address = profile.get("emailAddress")
+            if gmail_address:
+                user.email = gmail_address
+                user.save(update_fields=["email"])
+                logger.info(f"Updated user {user.pk} email to {gmail_address}")
+        except Exception as e:
+            logger.error(f"Failed to update user email from Gmail profile: {e}")
+
+        # Redirect to a frontend page indicating success
         return HttpResponseRedirect("http://localhost:5173/settings/connect?google_auth=success")
+
     except Exception as e:
-        logger.error(f"OAuth2 callback failed: {e}")
+        logger.error(f"OAuth2 callback failed for user {user.pk}: {e}")
+        # Redirect to a frontend page indicating an error
         return HttpResponseRedirect("http://localhost:5173/settings/connect?google_auth=error")
+
 
 class EmailListView(APIView):
     """
-    Fetches user emails with improved error handling and pagination.
+    Fetches user emails with improved error handling, pagination, and performance.
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
         """
-        Retrieve Gmail messages for authenticated user.
+        Retrieve Gmail messages for the authenticated user using efficient batching.
         
         Query parameters:
         - email: Filter by sender/recipient email
@@ -131,24 +166,18 @@ class EmailListView(APIView):
         - page_token: For pagination
         """
         try:
-            # Get and validate credentials
             creds = get_google_credentials(request.user)
             service = build("gmail", "v1", credentials=creds)
             
-            # Parse query parameters
             email_filter = request.query_params.get("email")
             max_results = min(int(request.query_params.get("max_results", 10)), 100)
             page_token = request.query_params.get("page_token")
             
-            # Build Gmail query
             query = f"from:{email_filter} OR to:{email_filter}" if email_filter else None
             
-            # Fetch message list
-            list_params = {
-                "userId": "me",
-                "maxResults": max_results,
-                "q": query
-            }
+            list_params = {"userId": "me", "maxResults": max_results}
+            if query:
+                list_params["q"] = query
             if page_token:
                 list_params["pageToken"] = page_token
                 
@@ -158,21 +187,22 @@ class EmailListView(APIView):
             
             if not messages:
                 return Response({
-                    "emails": [],
-                    "next_page_token": None,
+                    "emails": [], 
+                    "next_page_token": None, 
                     "total_count": 0
                 })
 
-            # Fetch message details
+            # --- Performance Improvement: Use a Batch Request ---
             email_data = []
+            batch = service.new_batch_http_request(
+                callback=self._batch_callback_factory(email_data)
+            )
+
             for msg in messages:
-                try:
-                    email_detail = self._get_email_detail(service, msg["id"])
-                    if email_detail:
-                        email_data.append(email_detail)
-                except HttpError as e:
-                    logger.warning(f"Failed to fetch email {msg['id']}: {e}")
-                    continue
+                batch.add(service.users().messages().get(userId="me", id=msg["id"], format="full"))
+
+            batch.execute()
+            # --- End of Batch Request ---
 
             return Response({
                 "emails": email_data,
@@ -181,105 +211,96 @@ class EmailListView(APIView):
             })
 
         except ObjectDoesNotExist:
-            return Response(
-                {"error": "Google credentials not found. Please authenticate first."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({"error": "Google credentials not found. Please authenticate first."}, status=status.HTTP_401_UNAUTHORIZED)
         except RefreshError:
-            return Response(
-                {"error": "Authentication expired. Please re-authenticate."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({"error": "Authentication expired. Please re-authenticate."}, status=status.HTTP_401_UNAUTHORIZED)
         except HttpError as e:
-            logger.error(f"Gmail API error: {e}")
-            return Response(
-                {"error": "Failed to fetch emails from Gmail"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
+            logger.error(f"Gmail API error for user {request.user.pk}: {e}")
+            return Response({"error": f"Failed to fetch emails from Gmail: {e.reason}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except Exception as e:
-            logger.error(f"Unexpected error in EmailListView: {e}")
-            return Response(
-                {"error": "An unexpected error occurred"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Unexpected error in EmailListView for user {request.user.pk}: {e}")
+            return Response({"error": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def _get_email_detail(self, service, message_id):
-        """
-        Extract email details from Gmail message.
+    def _batch_callback_factory(self, email_data_list):
+        """Creates a callback function to process results from the batch request."""
+        def callback(request_id, response, exception):
+            if exception:
+                logger.error(f"Error in batch request item {request_id}: {exception}")
+                return
+
+            try:
+                headers = response["payload"]["headers"]
+                def get_header(name, default="(Unknown)"):
+                    return next((h["value"] for h in headers if h["name"].lower() == name.lower()), default)
+                
+                body = self._extract_body(response["payload"])
+                
+                email_detail = {
+                    "id": response["id"],
+                    "from": get_header("From"),
+                    "to": get_header("To"),
+                    "subject": get_header("Subject", "(No Subject)"),
+                    "date": get_header("Date"),
+                    "message_id": get_header("Message-ID"),
+                    "body": body.strip(),
+                    "snippet": response.get("snippet", "")
+                }
+                email_data_list.append(email_detail)
+            except Exception as e:
+                logger.error(f"Error processing batch response item {request_id}: {e}")
         
-        Args:
-            service: Gmail service instance
-            message_id: Gmail message ID
-            
-        Returns:
-            dict: Email details or None if extraction fails
-        """
-        try:
-            msg_detail = service.users().messages().get(
-                userId="me", 
-                id=message_id,
-                format='full'
-            ).execute()
-            
-            headers = msg_detail["payload"]["headers"]
-            
-            # Extract headers safely
-            def get_header(name, default="(Unknown)"):
-                return next((h["value"] for h in headers if h["name"].lower() == name.lower()), default)
-            
-            subject = get_header("Subject", "(No Subject)")
-            from_email = get_header("From")
-            to_email = get_header("To")
-            date = get_header("Date")
-            message_id_header = get_header("Message-ID")
-            
-            # Extract body content
-            body = self._extract_body(msg_detail["payload"])
-            
-            return {
-                "id": message_id,
-                "from": from_email,
-                "to": to_email,
-                "subject": subject,
-                "date": date,
-                "message_id": message_id_header,
-                "body": body.strip() if body else "",
-                "snippet": msg_detail.get("snippet", "")
-            }
-            
-        except Exception as e:
-            logger.error(f"Error extracting email detail for {message_id}: {e}")
-            return None
-    
+        return callback
+
     def _extract_body(self, payload):
-        """
-        Extract email body from message payload.
-        
-        Args:
-            payload: Gmail message payload
-            
-        Returns:
-            str: Email body content
-        """
+        """Recursively extracts the plain text body from a message payload."""
         body = ""
-        
-        try:
-            if "parts" in payload:
-                # Multi-part message
-                for part in payload["parts"]:
-                    if part["mimeType"] == "text/plain" and "data" in part.get("body", {}):
-                        body = base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
-                        break
-                    elif (part["mimeType"] == "text/html" and 
-                          not body and 
-                          "data" in part.get("body", {})):
-                        body = base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8")
-            else:
-                # Single-part message
-                if "data" in payload.get("body", {}):
-                    body = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
-                    
-        except Exception as e:
-            logger.error(f"Error extracting body: {e}")
-            
+        if "parts" in payload:
+            for part in payload['parts']:
+                if part['mimeType'] == 'text/plain' and 'data' in part.get('body', {}):
+                    return base64.urlsafe_b64decode(part['body']['data']).decode('utf-8', errors='ignore')
+                # Recurse for nested parts
+                elif 'parts' in part:
+                    nested_body = self._extract_body(part)
+                    if nested_body:
+                        return nested_body
+        elif "data" in payload.get("body", {}):
+            return base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8', errors='ignore')
         return body
+
+
+class SendEmailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Expects JSON body: { "to": "...", "subject": "...", "body": "..." }
+        """
+        to = request.data.get("to")
+        subject = request.data.get("subject")
+        body = request.data.get("body")
+        if not (to and subject and body):
+            return Response({"error": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            creds = get_google_credentials(request.user)
+            service = build("gmail", "v1", credentials=creds)
+
+            # Create MIME message
+            message = MIMEText(body)
+            message["to"] = to
+            message["subject"] = subject
+
+            # Encode message
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+            # Send email
+            send_message = (
+                service.users().messages().send(
+                    userId="me",
+                    body={"raw": raw}
+                ).execute()
+            )
+            return Response({"message_id": send_message["id"]}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Failed to send email: {e}")
+            return Response({"error": "Failed to send email"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
