@@ -1,8 +1,13 @@
 # views.py
 
 import base64
+import json
 import logging
 from datetime import timezone, timedelta
+from google import genai
+from google.genai import types
+
+from pydantic import BaseModel
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -304,3 +309,51 @@ class SendEmailView(APIView):
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
             return Response({"error": "Failed to send email"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class Email(BaseModel):
+    subject: str
+    body: str
+
+class AiCompose(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=request.data.get("body"),
+                config=types.GenerateContentConfig(
+                    system_instruction=f"You are a helpful email assistant. Always write professional and polite emails based on the user's request. Give with proper format with newline and new tab etc in body and. name = {request.user} to={request.data.get("to")}",
+                    response_mime_type="application/json",
+                    response_schema=Email,
+                ),
+            )
+            
+            # Parse the JSON response
+            email_data = json.loads(response.text)
+            print(email_data)
+            
+            # Return as a proper dict
+            return Response(email_data, status=status.HTTP_200_OK)
+            
+            # Alternative: Use parsed objects if available
+            # email_obj = response.parsed
+            # return Response({
+            #     "subject": email_obj.subject,
+            #     "body": email_obj.body
+            # }, status=status.HTTP_200_OK)
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            return Response(
+                {"error": "Invalid JSON response from AI service.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return Response(
+                {"error": "Failed to generate content from the AI service.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
