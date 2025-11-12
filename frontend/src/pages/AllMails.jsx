@@ -176,65 +176,48 @@ const AllMails = () => {
 };
 
 // Email List View Component
-const EmailListView = ({ emails, onEmailClick, formatDate, parseFrom, onScroll, isLoadingMore, hasMore }) => {
+const EmailListView = ({ emails, onEmailClick, formatDate, parseFrom }) => {
   return (
-    <div className="h-full overflow-y-auto bg-gray-950" onScroll={onScroll}>
+    <div className="h-full overflow-y-auto bg-gray-950">
       {emails.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full text-gray-400">
           <Mail className="w-16 h-16 mb-4" />
           <p className="text-lg">No emails found</p>
         </div>
       ) : (
-        <>
-          <div className="divide-y divide-gray-800">
-            {emails.map((email) => {
-              const { name, email: emailAddr } = parseFrom(email.from);
-              return (
-                <div
-                  key={email.id}
-                  onClick={() => onEmailClick(email)}
-                  className="px-6 py-4 hover:bg-gray-900 cursor-pointer transition-colors bg-gray-950 border-b border-gray-800/50"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                        <span className="text-sm font-semibold text-white">
-                          {name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white truncate">{name}</p>
-                        <p className="text-sm text-gray-400 truncate">{emailAddr}</p>
-                      </div>
+        <div className="divide-y divide-gray-800">
+          {emails.map((email) => {
+            const { name, email: emailAddr } = parseFrom(email.from);
+            return (
+              <div
+                key={email.id}
+                onClick={() => onEmailClick(email)}
+                className="px-6 py-4 hover:bg-gray-900 cursor-pointer transition-colors bg-gray-950 border-b border-gray-800/50"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                      <span className="text-sm font-semibold text-white">
+                        {name.charAt(0).toUpperCase()}
+                      </span>
                     </div>
-                    <div className="flex-shrink-0 text-xs text-gray-500 ml-4">
-                      {formatDate(email.date)}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-white truncate">{name}</p>
+                      <p className="text-sm text-gray-400 truncate">{emailAddr}</p>
                     </div>
                   </div>
-                  <div className="ml-13">
-                    <p className="font-medium text-gray-200 mb-1 truncate">{email.subject}</p>
-                    <p className="text-sm text-gray-400 line-clamp-2">{email.snippet}</p>
+                  <div className="flex-shrink-0 text-xs text-gray-500 ml-4">
+                    {formatDate(email.date)}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          
-          {/* Loading Indicator */}
-          {isLoadingMore && (
-            <div className="flex justify-center items-center py-8">
-              <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-              <span className="ml-3 text-gray-400">Loading more emails...</span>
-            </div>
-          )}
-
-          {/* End of List Indicator */}
-          {!hasMore && emails.length > 0 && (
-            <div className="flex justify-center items-center py-8">
-              <span className="text-gray-500">No more emails</span>
-            </div>
-          )}
-        </>
+                <div className="ml-13">
+                  <p className="font-medium text-gray-200 mb-1 truncate">{email.subject}</p>
+                  <p className="text-sm text-gray-400 line-clamp-2">{email.snippet}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

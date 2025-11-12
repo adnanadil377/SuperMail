@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, MessageCircleMore, UserRoundPen, Mail } from "lucide-react";
+import { LogOut, MessageCircleMore, UserRoundPen, Mail, ChartArea } from "lucide-react";
 
 const Sidebar = ({ onLogout }) => {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ const Sidebar = ({ onLogout }) => {
   const navItems = [
     { path: "/", label: "Chats", icon: <MessageCircleMore /> },
     { path: "/all-mails", label: "All Mails", icon: <Mail /> },
+    { path: "/chat", label: "chat", icon: <ChartArea /> },
     { path: "/settings", label: "Profile", icon: <UserRoundPen /> },
   ];
 

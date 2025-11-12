@@ -10,6 +10,7 @@ import Contacts from './pages/Contacts';
 import Profile from './pages/Profile';
 import Signup from './auth/Signup';
 import AllMails from './pages/AllMails';
+import AIChatPage from './pages/AIChatPage';
 
 const App = () => {
   return (
@@ -21,6 +22,7 @@ const App = () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Home/>} />
             <Route path="/all-mails" element={<AllMails />} />
+            <Route path="/chat" element={<AIChatPage />} />
             <Route path="/settings" element={<Settings />}>
               <Route path="connect" element={<Connect />} />
               <Route path="contacts" element={<Contacts />} />
