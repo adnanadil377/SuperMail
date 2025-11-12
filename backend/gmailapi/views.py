@@ -273,6 +273,140 @@ class EmailListView(APIView):
         return body
 
 
+class EmailDetailView(APIView):
+    """
+    Fetches a single email by ID with full details.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, email_id):
+        """
+        Retrieve a specific Gmail message by ID for the authenticated user.
+        
+        URL parameter:
+        - email_id: The Gmail message ID
+        """
+        try:
+            creds = get_google_credentials(request.user)
+            service = build("gmail", "v1", credentials=creds)
+            
+            # Fetch the specific message
+            message = service.users().messages().get(
+                userId="me", 
+                id=email_id, 
+                format="full"
+            ).execute()
+            
+            # Extract headers
+            headers = message["payload"]["headers"]
+            def get_header(name, default="(Unknown)"):
+                return next((h["value"] for h in headers if h["name"].lower() == name.lower()), default)
+            
+            # Extract both plain text and HTML body
+            body_data = self._extract_all_bodies(message["payload"])
+            
+            email_detail = {
+                "id": message["id"],
+                "from": get_header("From"),
+                "to": get_header("To"),
+                "subject": get_header("Subject", "(No Subject)"),
+                "date": get_header("Date"),
+                "message_id": get_header("Message-ID"),
+                "body": body_data.get("text", "").strip(),
+                "body_html": body_data.get("html", "").strip(),
+                "content_type": body_data.get("type", "text/plain"),
+                "snippet": message.get("snippet", ""),
+                "labels": message.get("labelIds", []),
+                "thread_id": message.get("threadId", "")
+            }
+            
+            return Response(email_detail, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist:
+            return Response(
+                {"error": "Google credentials not found. Please authenticate first."}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        except RefreshError:
+            return Response(
+                {"error": "Authentication expired. Please re-authenticate."}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        except HttpError as e:
+            if e.resp.status == 404:
+                return Response(
+                    {"error": "Email not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            logger.error(f"Gmail API error for user {request.user.pk}: {e}")
+            return Response(
+                {"error": f"Failed to fetch email from Gmail: {e.reason}"}, 
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in EmailDetailView for user {request.user.pk}: {e}")
+            return Response(
+                {"error": "An unexpected error occurred"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _extract_all_bodies(self, payload):
+        """
+        Extracts both plain text and HTML bodies from a message payload.
+        Returns a dict with 'text', 'html', and 'type' keys.
+        """
+        result = {"text": "", "html": "", "type": "text/plain"}
+        
+        def extract_recursive(part):
+            """Recursively extract text and HTML content."""
+            mime_type = part.get('mimeType', '')
+            
+            # Check if this part has body data
+            if 'data' in part.get('body', {}):
+                data = part['body']['data']
+                decoded = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                
+                if mime_type == 'text/plain':
+                    result["text"] = decoded
+                elif mime_type == 'text/html':
+                    result["html"] = decoded
+                    result["type"] = "text/html"
+            
+            # Recurse into nested parts
+            if 'parts' in part:
+                for subpart in part['parts']:
+                    extract_recursive(subpart)
+        
+        # Start extraction
+        extract_recursive(payload)
+        
+        # If no plain text but we have HTML, set type accordingly
+        if not result["text"] and result["html"]:
+            result["type"] = "text/html"
+        elif result["text"] and not result["html"]:
+            result["type"] = "text/plain"
+        elif result["text"] and result["html"]:
+            result["type"] = "multipart"
+            
+        return result
+    
+    def _extract_body(self, payload):
+        """Recursively extracts the plain text body from a message payload."""
+        body = ""
+        if "parts" in payload:
+            for part in payload['parts']:
+                if part['mimeType'] == 'text/plain' and 'data' in part.get('body', {}):
+                    return base64.urlsafe_b64decode(part['body']['data']).decode('utf-8', errors='ignore')
+                # Recurse for nested parts
+                elif 'parts' in part:
+                    nested_body = self._extract_body(part)
+                    if nested_body:
+                        return nested_body
+        elif "data" in payload.get("body", {}):
+            return base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8', errors='ignore')
+        return body
+
+
 class SendEmailView(APIView):
     permission_classes = [IsAuthenticated]
 
