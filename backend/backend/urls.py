@@ -6,4 +6,5 @@ urlpatterns = [
     path('', include('gmailapi.urls')),
     path('contactapi/', include('contact_api.urls')),
     path('user/', include('acc_api.urls')),
+    path('agent/', include('agent_api.urls')),
 ]

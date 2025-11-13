@@ -459,7 +459,7 @@ class AiCompose(APIView):
                 model="gemini-2.5-flash",
                 contents=request.data.get("body"),
                 config=types.GenerateContentConfig(
-                    system_instruction=f"You are a helpful email assistant. Always write professional and polite emails based on the user's request. Give with proper format with newline and new tab etc in body and. name = {request.user} to={request.data.get("to")}",
+                    system_instruction=f"You are a helpful email assistant. Always write professional and polite emails based on the user's content. Give with proper format with newline and new tab etc in body and. name = {request.user} to={request.data.get("to")}",
                     response_mime_type="application/json",
                     response_schema=Email,
                 ),
