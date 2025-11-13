@@ -8,7 +8,10 @@ const AIChatPage = () => {
     <div>
         <AIEmailAgent
             user={user} 
-            onSuccess={() => fetchEmails()} 
+            onSuccess={() => {
+              console.log('✅ Emails sent successfully!');
+              // Optionally refresh or navigate
+            }} 
         />
     </div>
   )

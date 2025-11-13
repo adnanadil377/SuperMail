@@ -21,7 +21,7 @@ if (-not (Test-Path "backend") -or -not (Test-Path "frontend") -or -not (Test-Pa
 Write-Host "This will open 3 terminal windows:" -ForegroundColor Cyan
 Write-Host "  1. Django Backend (port 8000)" -ForegroundColor White
 Write-Host "  2. React Frontend (port 5173)" -ForegroundColor White
-Write-Host "  3. LangGraph Agent (port 8001)" -ForegroundColor White
+Write-Host "  3. LangGraph Agent (port 2024)" -ForegroundColor White
 Write-Host ""
 
 # Check if Google API key is configured
@@ -56,7 +56,7 @@ Start-Sleep -Seconds 2
 
 # Start LangGraph Server
 Write-Host "[3/3] Starting LangGraph Agent..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\langgraph_server'; Write-Host 'LangGraph Email Agent' -ForegroundColor Green; Write-Host 'Running on: http://localhost:8001' -ForegroundColor Cyan; Write-Host 'API Docs: http://localhost:8001/docs' -ForegroundColor Cyan; Write-Host ''; python main.py"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\langgraph_server'; Write-Host 'LangGraph Email Agent' -ForegroundColor Green; Write-Host 'Running on: http://127.0.0.1:2024' -ForegroundColor Cyan; Write-Host 'Studio: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024' -ForegroundColor Cyan; Write-Host ''; langgraph dev"
 
 Write-Host ""
 Write-Host "=" -NoNewline -ForegroundColor Cyan
@@ -68,8 +68,8 @@ Write-Host ""
 Write-Host "URLs:" -ForegroundColor White
 Write-Host "  Frontend:  http://localhost:5173" -ForegroundColor Cyan
 Write-Host "  Backend:   http://127.0.0.1:8000" -ForegroundColor Cyan
-Write-Host "  AI Agent:  http://localhost:8001" -ForegroundColor Cyan
-Write-Host "  API Docs:  http://localhost:8001/docs" -ForegroundColor Cyan
+Write-Host "  AI Agent:  http://127.0.0.1:2024" -ForegroundColor Cyan
+Write-Host "  Studio:    https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "To stop all services:" -ForegroundColor Yellow
 Write-Host "  Close each terminal window or press Ctrl+C in each" -ForegroundColor Yellow
