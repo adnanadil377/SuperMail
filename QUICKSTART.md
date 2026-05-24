@@ -1,4 +1,4 @@
-# 🚀 Quick Start Guide - LangGraph Email Agent (Studio Mode)
+# 🚀 SuperMail - Quick Start Guide - SuperMail (Studio Mode)
 
 ## ✅ What's Been Created
 
@@ -78,7 +78,7 @@ python main.py
 
 You should see:
 ```
-🚀 Starting LangGraph Email Agent Server
+🚀 Starting SuperMail Server
 📍 API Documentation: http://localhost:8001/docs
 📍 Health Check: http://localhost:8001/health
 ```
@@ -231,7 +231,7 @@ Add them via your email client UI or Django admin.
 ```
 User: "Send that I'm on leave for 5 days to my manager and colleagues"
   ↓
-LangGraph Agent:
+SuperMail Agent:
   1. Fetches your contacts from Django
   2. AI analyzes: needs to email manager + colleagues
   3. AI composes: formal email for manager, professional for colleagues

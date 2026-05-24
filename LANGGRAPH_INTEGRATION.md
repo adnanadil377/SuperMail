@@ -1,4 +1,4 @@
-# LangGraph Email Agent - Integration Guide
+# 🚀 SuperMail - Integration Guide
 
 ## 📋 Table of Contents
 1. [Overview](#overview)
@@ -12,7 +12,7 @@
 
 ## 🎯 Overview
 
-The LangGraph Email Agent is an AI-powered assistant that:
+The SuperMail is an AI-powered assistant that:
 - **Understands natural language**: "Send that I'm on leave for 5 days to my manager and colleagues"
 - **Automatically finds recipients**: Matches contacts based on their relation (manager, colleague, etc.)
 - **Adapts tone**: Formal for managers, appropriate for colleagues
@@ -74,7 +74,7 @@ python main.py
 You should see:
 ```
 ============================================================
-🚀 Starting LangGraph Email Agent Server
+🚀 Starting SuperMail Server
 ============================================================
 📍 API Documentation: http://localhost:8001/docs
 📍 Health Check: http://localhost:8001/health
@@ -144,7 +144,7 @@ const AIEmailAgent = ({ user, onSuccess }) => {
   return (
     <div className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 rounded-2xl p-6 mb-4">
       <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
-        <span>🤖</span> AI Email Agent
+        <span>🤖</span> SuperMail Agent
       </h3>
       <p className="text-sm text-gray-300 mb-4">
         Just tell me what to send and to whom. I'll handle the rest!
@@ -466,7 +466,7 @@ For issues or questions:
 
 ## 📝 License
 
-This LangGraph agent integrates with your existing SuperMail project and follows the same license.
+This SuperMail Agent integrates with your existing SuperMail project and follows the same license.
 
 ---
 

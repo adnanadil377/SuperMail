@@ -1,4 +1,4 @@
-# Backend-LangGraph Integration
+# 🚀 SuperMail - Backend-LangGraph Integration
 
 This document explains how the Django backend connects to the LangGraph server to enable AI-powered email sending.
 

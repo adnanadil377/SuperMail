@@ -1,8 +1,8 @@
-# 🎯 Conversational AI Email Agent - Complete Guide
+# 🚀 SuperMail - Conversational SuperMail Agent - Complete Guide
 
 ## What Changed?
 
-Your AI email agent now has **conversational intelligence**! Instead of directly sending emails, it:
+Your SuperMail Agent now has **conversational intelligence**! Instead of directly sending emails, it:
 
 1. **Asks clarifying questions** when information is missing
 2. **Shows a preview** of all emails before sending

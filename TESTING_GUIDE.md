@@ -1,4 +1,4 @@
-# Integration Test Guide
+# 🚀 SuperMail - Integration Test Guide
 
 ## Quick Test Steps
 
@@ -45,7 +45,7 @@ Expected output:
 
 #### Option A: Use the UI Component
 
-1. Navigate to the AI Email Agent page/component
+1. Navigate to the SuperMail Agent page/component
 2. Type: "Send that I'm on leave for 5 days to my manager and colleagues"
 3. Click "Send via AI Agent"
 4. Watch the process:

@@ -1,4 +1,4 @@
-# ✅ LangGraph Backend Integration Complete!
+# 🚀 SuperMail - LangGraph Backend Integration Complete!
 
 ## What I've Done
 
@@ -200,6 +200,6 @@ Everything is connected! Just run `.\start_all.ps1` and start sending emails wit
 
 Test it out:
 1. Login to your app
-2. Go to the AI Email Agent page
+2. Go to the SuperMail Agent page
 3. Type: "Send that I'm on leave for 5 days to my manager and colleagues"
 4. Watch the magic happen! ✨
