@@ -1,4 +1,4 @@
-# LangGraph Email Agent - Studio Mode
+# 🚀 SuperMail - Studio Mode
 
 AI-powered email agent with visual development using LangGraph Studio.
 
