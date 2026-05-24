@@ -51,7 +51,7 @@ class TriageDecision(BaseModel):
     extracted_info: str = Field(description="Summary of the user's intent and any extracted details (names, dates, subjects).")
 
 def triage_node(state: AgentState):
-    print("🩺 [Triage Agent] Analyzing request...")
+    print("[Triage Agent] Analyzing request...")
     sys_msg = """You are the Triage Agent. Your job is to chat with the user, figure out if they want to read or send emails, and gather missing info.
 If they want to read emails, set action='read_emails'.
 If they want to send an email, ensure you know WHO to send it to and WHAT the core message is. If this information is missing, set action='ask_user' and ask them in 'response_to_user'.
@@ -82,7 +82,7 @@ def triage_router(state: AgentState):
 
 # --- 2. Researcher Agent ---
 def researcher_node(state: AgentState):
-    print("🕵️ [Researcher Agent] Gathering data...")
+    print("[Researcher Agent] Gathering data...")
     
     # Dynamically create tools so they have access to the current state (like user_token)
     @tool
@@ -122,7 +122,7 @@ If action is 'send_emails': Use the search_contacts tool to find the email addre
     return {"messages": [response]}
 
 def researcher_tools_node(state: AgentState):
-    print("⚙️ [Researcher Tools] Executing tool...")
+    print("[Researcher Tools] Executing tool...")
     last_msg = state["messages"][-1]
     
     # Re-define tools for execution
@@ -177,7 +177,7 @@ class EmailDraft(BaseModel):
     to_name: str
 
 def copywriter_node(state: AgentState):
-    print("✍️ [Copywriter Agent] Drafting email...")
+    print("[Copywriter Agent] Drafting email...")
     sys_msg = f"""You are the Copywriter Agent.
 Your job is to write an email draft based on the user's request.
 Extracted info: {state.get('extracted_info', '')}
@@ -204,7 +204,7 @@ class QAResult(BaseModel):
     feedback: str = Field(description="Detailed feedback if passed is False. Say 'Passed' if True.")
 
 def qa_node(state: AgentState):
-    print("🧐 [QA Agent] Reviewing draft...")
+    print("[QA Agent] Reviewing draft...")
     draft = state.get("draft_email", {})
     sys_msg = f"""You are the QA / Reviewer Agent.
 Your job is to review the following email draft:
@@ -238,9 +238,9 @@ def qa_router(state: AgentState):
 
 # --- 5. Output / Action Nodes ---
 def create_preview(state: AgentState):
-    print("👀 [System] Creating preview for user...")
+    print("[System] Creating preview for user...")
     draft = state.get("draft_email", {})
-    preview_text = f"📧 **Email Preview**\n\n**To:** {draft.get('to_name')} ({draft.get('to')})\n**Subject:** {draft.get('subject')}\n**Body:**\n{draft.get('body')}\n\n---\n✅ Type **'send'** to send\n❌ Type **'cancel'** to cancel\n✏️ Type **'edit'** to make changes"
+    preview_text = f"**Email Preview**\n\n**To:** {draft.get('to_name')} ({draft.get('to')})\n**Subject:** {draft.get('subject')}\n**Body:**\n{draft.get('body')}\n\n---\n✅ Type **'send'** to send\n❌ Type **'cancel'** to cancel\n✏️ Type **'edit'** to make changes"
     
     emails_to_send = [draft]
     
@@ -251,7 +251,7 @@ def create_preview(state: AgentState):
     }
 
 def send_emails_node(state: AgentState):
-    print("📤 [System] Sending emails...")
+    print("[System] Sending emails...")
     results = []
     headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
     
@@ -276,8 +276,8 @@ def send_emails_node(state: AgentState):
     return {"messages": [AIMessage(content="\n".join(results))], "awaiting_approval": False}
 
 def cancel_node(state: AgentState):
-    print("🚫 [System] Action cancelled by user.")
-    return {"messages": [AIMessage(content="❌ Email action cancelled.")], "awaiting_approval": False}
+    print("[System] Action cancelled by user.")
+    return {"messages": [AIMessage(content="Email action cancelled.")], "awaiting_approval": False}
 
 # --- Entry Router ---
 def entry_router(state: AgentState):
