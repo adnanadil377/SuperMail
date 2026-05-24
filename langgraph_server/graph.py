@@ -1,16 +1,19 @@
 """
-LangGraph Email Agent Graph
-This is the main graph file for LangGraph Studio
+LangGraph Multi-Agent System
+Features Triage, Researcher, Copywriter, and QA Agents.
 """
 
 import os
-from typing import TypedDict, Annotated, Sequence
-from langgraph.graph import StateGraph, END
+from typing import TypedDict, Annotated, Sequence, Literal
+from langgraph.graph import StateGraph, END, START
+from langgraph.graph.message import add_messages
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
 import requests
 import json
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -25,403 +28,234 @@ llm = ChatGoogleGenerativeAI(
     temperature=0.7
 )
 
-# Define State
-class EmailAgentState(TypedDict):
-    """State for the email agent workflow"""
-    messages: Annotated[Sequence[BaseMessage], "The messages in the conversation"]
-    user_input: str
-    contacts: list
-    intent: dict
-    emails_to_send: list
+# --- State Definition ---
+class AgentState(TypedDict):
+    """Global state for the multi-agent workflow"""
+    messages: Annotated[list[BaseMessage], add_messages]
+    user_input: str  # Kept for backwards compatibility
     user_token: str
     user_id: int
-    missing_info: list  # List of missing information that needs to be asked
-    conversation_complete: bool  # Whether we have all info needed
-    awaiting_approval: bool  # Whether we're waiting for user to approve sending
-    action_type: str  # Type of action: 'send_email', 'summarize_emails', or 'unknown'
-    fetched_emails: list  # List of fetched emails for summarization
-
-# Node Functions
-def detect_action_type(state: EmailAgentState) -> EmailAgentState:
-    """Detect what type of action the user wants to perform"""
-    print("🔍 Detecting action type...")
     
-    user_input = state["user_input"].lower()
+    # Agent Communication Fields
+    action_type: str
+    extracted_info: str
+    draft_email: dict
+    qa_feedback: str
+    emails_to_send: list
+    awaiting_approval: bool
+
+# --- 1. Triage Agent ---
+class TriageDecision(BaseModel):
+    action: Literal["ask_user", "read_emails", "send_emails"]
+    response_to_user: str = Field(description="Message to the user if asking for more info.")
+    extracted_info: str = Field(description="Summary of the user's intent and any extracted details (names, dates, subjects).")
+
+def triage_node(state: AgentState):
+    print("🩺 [Triage Agent] Analyzing request...")
+    sys_msg = """You are the Triage Agent. Your job is to chat with the user, figure out if they want to read or send emails, and gather missing info.
+If they want to read emails, set action='read_emails'.
+If they want to send an email, ensure you know WHO to send it to and WHAT the core message is. If this information is missing, set action='ask_user' and ask them in 'response_to_user'.
+If all info is present for sending, set action='send_emails'."""
     
-    # Keywords for summarization
-    summarize_keywords = ['summarize', 'summary', 'recent emails', 'latest emails', 
-                          'what emails', 'show emails', 'my emails', 'inbox summary',
-                          'email overview', 'what did i receive', 'check my emails']
+    response = llm.with_structured_output(TriageDecision).invoke([SystemMessage(content=sys_msg)] + state["messages"])
     
-    # Check if user wants summarization
-    if any(keyword in user_input for keyword in summarize_keywords):
-        state["action_type"] = "summarize_emails"
-        state["conversation_complete"] = True
-        print("  ✓ Detected: Email Summarization")
-    else:
-        # Default to sending emails
-        state["action_type"] = "send_email"
-        print("  ✓ Detected: Send Email")
-    
-    return state
-
-def fetch_emails(state: EmailAgentState) -> EmailAgentState:
-    """Fetch recent emails from the backend"""
-    print("📬 Fetching recent emails...")
-    try:
-        headers = {"Authorization": f"Bearer {state['user_token']}"}
-        response = requests.get(
-            f"{BACKEND_URL}/emails/",  # Fetch last 10 emails
-            headers=headers
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        # FIX: Change from "emails" to "results" to match your API response
-        state["fetched_emails"] = data.get("results", [])
-        print(f"✓ Fetched {len(state['fetched_emails'])} emails")
-        
-        # Optional: Log the total count and next page token
-        total_count = data.get("total_count", 0)
-        print(f"  Total emails available: {total_count}")
-        
-    except Exception as e:
-        print(f"✗ Error fetching emails: {e}")
-        state["fetched_emails"] = []
-    return state
-
-def summarize_emails(state: EmailAgentState) -> EmailAgentState:
-    """Summarize the fetched emails using AI"""
-    print("📝 Summarizing emails with AI...")
-    
-    emails = state["fetched_emails"]
-    
-    if not emails:
-        summary = "📭 No recent emails found in your inbox."
-        if "messages" not in state or state["messages"] is None:
-            state["messages"] = []
-        state["messages"] = list(state["messages"]) + [AIMessage(content=summary)]
-        return state
-    
-    # Prepare email data for summarization
-    emails_text = ""
-    for idx, email in enumerate(emails[:10], 1):  # Limit to 10 emails
-        from_email = email.get("from", "Unknown")
-        subject = email.get("subject", "No Subject")
-        snippet = email.get("snippet", "")
-        date = email.get("date", "Unknown date")
-        
-        emails_text += f"{idx}. From: {from_email}\n"
-        emails_text += f"   Subject: {subject}\n"
-        emails_text += f"   Date: {date}\n"
-        emails_text += f"   Preview: {snippet[:150]}...\n\n"
-    
-    prompt = f"""You are an AI email assistant. Summarize these recent emails in a clear, organized way.
-
-RECENT EMAILS:
-{emails_text}
-
-Provide a summary that includes:
-1. Total number of emails
-2. Key highlights (important emails, urgent matters)
-3. Breakdown by sender/topic if relevant
-4. Any action items or follow-ups needed
-
-Format your response in a friendly, easy-to-read way with emojis where appropriate.
-Keep it concise but informative."""
-
-    try:
-        response = llm.invoke([HumanMessage(content=prompt)])
-        summary = response.content
-        print(f"✓ Generated summary: {len(summary)} characters")
-    except Exception as e:
-        print(f"✗ Error generating summary: {e}")
-        summary = f"📬 You have {len(emails)} recent emails. I encountered an error summarizing them, but here's a quick overview:\n\n"
-        for idx, email in enumerate(emails[:5], 1):
-            summary += f"{idx}. **{email.get('subject', 'No Subject')}** from {email.get('from', 'Unknown')}\n"
-    
-    # Add summary to messages
-    if "messages" not in state or state["messages"] is None:
-        state["messages"] = []
-    
-    state["messages"] = list(state["messages"]) + [AIMessage(content=summary)]
-    print("✓ Email summary added to conversation")
-    
-    return state
-
-def fetch_contacts(state: EmailAgentState) -> EmailAgentState:
-    """Fetch contacts from the backend"""
-    print("📋 Fetching contacts from backend...")
-    try:
-        headers = {"Authorization": f"Bearer {state['user_token']}"}
-        response = requests.get(f"{BACKEND_URL}/contactapi/contacts/", headers=headers)
-        response.raise_for_status()
-        state["contacts"] = response.json()
-        print(f"✓ Fetched {len(state['contacts'])} contacts")
-    except Exception as e:
-        print(f"✗ Error fetching contacts: {e}")
-        state["contacts"] = []
-    return state
-
-def analyze_intent(state: EmailAgentState) -> EmailAgentState:
-    """Analyze user intent and identify missing information"""
-    print("🧠 Analyzing intent with AI...")
-    contacts_info = "\n".join([
-        f"- {c.get('name', 'Unknown')} ({c.get('email', 'N/A')}): relation={c.get('relation', 'N/A')}, tone={c.get('tone', 'professional')}"
-        for c in state["contacts"]
-    ])
-    
-    # Get full conversation history INCLUDING the latest user input
-    conversation_history = ""
-    if state.get("messages"):
-        for msg in state["messages"]:
-            if isinstance(msg, HumanMessage):
-                conversation_history += f"User: {msg.content}\n"
-            elif isinstance(msg, AIMessage):
-                conversation_history += f"Assistant: {msg.content}\n"
-    
-    # Add current user input to the analysis
-    conversation_history += f"User: {state['user_input']}\n"
-    
-    prompt = f"""You are analyzing an email request conversation. Your job is to extract ALL information provided across the ENTIRE conversation and identify what is still missing.
-
-FULL CONVERSATION HISTORY:
-{conversation_history}
-
-Available Contacts:
-{contacts_info}
-
-CRITICAL INSTRUCTIONS:
-1. CAREFULLY read the ENTIRE conversation from start to finish
-2. Extract ALL dates, durations, reasons, and details mentioned in ANY message
-3. If a user provides information (like "14th november to 18th november"), that information is NOW PROVIDED - do NOT ask for it again
-4. Only mark information as "missing" if it was NEVER mentioned anywhere in the conversation
-5. If user mentions a duration like "5 days", calculate or use that for the date range
-
-Return JSON with:
-{{
-    "message_content": "Complete message combining ALL information from the conversation",
-    "recipients": [
-        {{
-            "name": "contact name",
-            "email": "contact email", 
-            "relation": "their relation",
-            "tone": "tone to use"
-        }}
-    ],
-    "subject_hint": "suggested subject",
-    "missing_info": [
-        {{
-            "field": "field name ONLY if truly missing",
-            "question": "Natural question to ask user",
-            "importance": "critical or optional"
-        }}
-    ],
-    "extracted_info": {{
-        "start_date": "extracted date or null",
-        "end_date": "extracted date or null",
-        "duration": "extracted duration or null",
-        "reason": "extracted reason or null",
-        "all_info_provided": true or false
-    }}
-}}
-
-EXAMPLES:
-- If user said "14th november to 18th november" → start_date="14th November", end_date="18th November", missing_info=[]
-- If user said "5 days starting tomorrow" → extract both dates, missing_info=[]
-- Only add to missing_info if the information was NEVER mentioned
-
-Return ONLY valid JSON, no additional text."""
-
-    try:
-        response = llm.invoke([HumanMessage(content=prompt)])
-        content = response.content
-        start = content.find('{')
-        end = content.rfind('}') + 1
-        if start != -1 and end > start:
-            json_str = content[start:end]
-            intent = json.loads(json_str)
-            state["intent"] = intent
-            
-            # Check if all info is provided based on extracted_info
-            extracted = intent.get("extracted_info", {})
-            all_info_provided = extracted.get("all_info_provided", False)
-            
-            # Get missing info and filter to only critical items
-            missing_info = intent.get("missing_info", [])
-            critical_missing = [m for m in missing_info if m.get("importance") == "critical"]
-            
-            state["missing_info"] = critical_missing
-            
-            # Mark conversation complete if no critical missing info
-            state["conversation_complete"] = len(critical_missing) == 0 or all_info_provided
-            
-            print(f"✓ Analyzed intent: {intent.get('subject_hint', 'No subject')}")
-            print(f"  Recipients: {len(intent.get('recipients', []))} found")
-            print(f"  Extracted info: {extracted}")
-            print(f"  Missing info: {len(critical_missing)} critical items")
-            
-            if state["conversation_complete"]:
-                print(f"  ✅ All information collected! Message: {intent.get('message_content', '')[:100]}...")
-            else:
-                print(f"  ❓ Still need: {[m['field'] for m in critical_missing]}")
-        else:
-            raise ValueError("No JSON found in response")
-    except Exception as e:
-        print(f"✗ Error analyzing intent: {e}")
-        print(f"  Response content: {response.content if 'response' in locals() else 'No response'}")
-        state["intent"] = {
-            "recipients": [], 
-            "message_content": state["user_input"],
-            "subject_hint": "Email from AI Agent",
-            "missing_info": []
+    if response.action == "ask_user":
+        print(f"  -> Need more info: {response.response_to_user}")
+        return {
+            "action_type": "ask_user", 
+            "messages": [AIMessage(content=response.response_to_user)], 
+            "extracted_info": response.extracted_info
         }
-        state["missing_info"] = []
-        state["conversation_complete"] = True
-    
-    return state
-
-def compose_emails(state: EmailAgentState) -> EmailAgentState:
-    """Compose personalized emails for each recipient"""
-    print("✍️ Composing personalized emails...")
-    emails = []
-    intent = state["intent"]
-    
-    for recipient in intent.get("recipients", []):
-        print(f"  Composing for {recipient.get('name', 'Unknown')}...")
-        prompt = f"""Compose a professional email based on this information:
-
-Message Content: {intent.get('message_content', '')}
-Recipient: {recipient.get('name', 'Unknown')}
-Recipient Relation: {recipient.get('relation', 'colleague')}
-Tone to Use: {recipient.get('tone', 'professional')}
-Subject Hint: {intent.get('subject_hint', '')}
-
-Generate a JSON response with:
-{{
-    "subject": "email subject line",
-    "body": "email body with proper formatting, newlines, and professional structure"
-}}
-
-Important:
-- Adapt the tone based on the recipient's relation and specified tone
-- For managers: more formal and professional
-- For colleagues: can be slightly more casual but still professional
-- Include proper salutation and closing
-- Use \\n for line breaks in the body
-- Return ONLY valid JSON, no additional text
-"""
-        
-        try:
-            response = llm.invoke([HumanMessage(content=prompt)])
-            content = response.content
-            start = content.find('{')
-            end = content.rfind('}') + 1
-            if start != -1 and end > start:
-                json_str = content[start:end]
-                email_data = json.loads(json_str)
-                
-                emails.append({
-                    "to": recipient.get("email"),
-                    "to_name": recipient.get("name"),
-                    "subject": email_data.get("subject", intent.get('subject_hint', 'Email')),
-                    "body": email_data.get("body", intent.get('message_content', '')),
-                    "tone": recipient.get("tone", "professional")
-                })
-                print(f"    ✓ Composed email for {recipient.get('name')}")
-            else:
-                raise ValueError("No JSON found in response")
-        except Exception as e:
-            print(f"    ✗ Error composing email for {recipient.get('name')}: {e}")
-            # Fallback email
-            emails.append({
-                "to": recipient.get("email"),
-                "to_name": recipient.get("name"),
-                "subject": intent.get('subject_hint', 'Email'),
-                "body": intent.get('message_content', ''),
-                "tone": recipient.get("tone", "professional")
-            })
-    
-    state["emails_to_send"] = emails
-    print(f"✓ Composed {len(emails)} emails")
-    return state
-
-def check_missing_info(state: EmailAgentState) -> EmailAgentState:
-    """Check if we need to ask for more information"""
-    print("🔍 Checking for missing information...")
-    
-    # Get all messages to check if we already asked this question
-    existing_questions = []
-    if state.get("messages"):
-        for msg in state["messages"]:
-            if isinstance(msg, AIMessage):
-                existing_questions.append(msg.content.lower())
-    
-    critical_missing = [m for m in state.get("missing_info", []) 
-                       if m.get("importance") == "critical"]
-    
-    if critical_missing and not state.get("conversation_complete", False):
-        # Get the question for the first missing item
-        question = critical_missing[0].get("question", "Could you provide more details?")
-        
-        # Check if we already asked a similar question
-        question_lower = question.lower()
-        already_asked = any(
-            q in question_lower or question_lower in q 
-            for q in existing_questions
-        )
-        
-        if already_asked:
-            # We already asked this, mark as complete to avoid loop
-            print(f"  ⚠️ Already asked this question, moving forward...")
-            state["conversation_complete"] = True
-        else:
-            if "messages" not in state or state["messages"] is None:
-                state["messages"] = []
-            
-            state["messages"] = list(state["messages"]) + [AIMessage(content=question)]
-            state["conversation_complete"] = False
-            print(f"  ❓ Asking user: {question}")
     else:
-        state["conversation_complete"] = True
-        print("  ✓ All information collected")
-    
-    return state
+        print(f"  -> Routing to: {response.action}")
+        return {
+            "action_type": response.action, 
+            "extracted_info": response.extracted_info
+        }
 
-def create_preview(state: EmailAgentState) -> EmailAgentState:
-    """Create preview of emails for user approval"""
-    print("👀 Creating email preview...")
-    
-    preview_text = "📧 **Email Preview** - Review before sending:\n\n"
-    
-    for idx, email in enumerate(state["emails_to_send"], 1):
-        preview_text += f"--- Email {idx} ---\n"
-        preview_text += f"**To:** {email['to_name']} ({email['to']})\n"
-        preview_text += f"**Subject:** {email['subject']}\n"
-        preview_text += f"**Body:**\n{email['body']}\n\n"
-    
-    preview_text += "---\n\n"
-    preview_text += "✅ Type **'send'** to send these emails\n"
-    preview_text += "❌ Type **'cancel'** to cancel\n"
-    preview_text += "✏️ Type **'edit'** to make changes"
-    
-    if "messages" not in state or state["messages"] is None:
-        state["messages"] = []
-    
-    state["messages"] = list(state["messages"]) + [AIMessage(content=preview_text)]
-    state["awaiting_approval"] = True
-    
-    print(f"  ✓ Preview created for {len(state['emails_to_send'])} emails")
-    return state
+def triage_router(state: AgentState):
+    if state.get("action_type") == "ask_user":
+        return END
+    elif state.get("action_type") in ["read_emails", "send_emails"]:
+        return "researcher"
+    return END
 
-def send_emails(state: EmailAgentState) -> EmailAgentState:
-    """Send all composed emails"""
-    print("📤 Sending emails...")
+# --- 2. Researcher Agent ---
+def researcher_node(state: AgentState):
+    print("🕵️ [Researcher Agent] Gathering data...")
+    
+    # Dynamically create tools so they have access to the current state (like user_token)
+    @tool
+    def get_latest_emails() -> str:
+        """Fetch the user's latest emails from the inbox."""
+        print("  -> Tool called: get_latest_emails")
+        try:
+            headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+            response = requests.get(f"{BACKEND_URL}/emails/", headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return json.dumps(data.get("results", [])[:10])
+        except Exception as e:
+            return f"Error fetching emails: {e}"
+            
+    @tool
+    def search_contacts() -> str:
+        """Fetch the user's contacts to find email addresses."""
+        print("  -> Tool called: search_contacts")
+        try:
+            headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+            response = requests.get(f"{BACKEND_URL}/contactapi/contacts/", headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except Exception as e:
+            return f"Error fetching contacts: {e}"
+
+    sys_msg = f"""You are the Researcher Agent. You have access to backend tools.
+Current action: {state.get('action_type')}
+Extracted info: {state.get('extracted_info', '')}
+
+If action is 'read_emails': Use the get_latest_emails tool. Once you receive the data, write a beautifully formatted summary of the emails to the user and DO NOT call tools anymore.
+If action is 'send_emails': Use the search_contacts tool to find the email address for the recipient mentioned in the extracted info. Once found, simply output 'CONTACT_FOUND: <email details>' and DO NOT call tools anymore.
+"""
+    bound_llm = llm.bind_tools([get_latest_emails, search_contacts])
+    response = bound_llm.invoke([SystemMessage(content=sys_msg)] + state["messages"])
+    return {"messages": [response]}
+
+def researcher_tools_node(state: AgentState):
+    print("⚙️ [Researcher Tools] Executing tool...")
+    last_msg = state["messages"][-1]
+    
+    # Re-define tools for execution
+    def execute_get_latest_emails():
+        try:
+            headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+            response = requests.get(f"{BACKEND_URL}/emails/", headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return json.dumps(data.get("results", [])[:10])
+        except Exception as e:
+            return f"Error fetching emails: {e}"
+            
+    def execute_search_contacts():
+        try:
+            headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+            response = requests.get(f"{BACKEND_URL}/contactapi/contacts/", headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except Exception as e:
+            return f"Error fetching contacts: {e}"
+
+    tool_map = {
+        "get_latest_emails": execute_get_latest_emails, 
+        "search_contacts": execute_search_contacts
+    }
+    
+    tool_messages = []
+    for tool_call in last_msg.tool_calls:
+        tool_fn = tool_map.get(tool_call["name"])
+        if tool_fn:
+            result = tool_fn()
+            tool_messages.append(ToolMessage(content=result, tool_call_id=tool_call["id"]))
+            
+    return {"messages": tool_messages}
+
+def researcher_router(state: AgentState):
+    last_message = state["messages"][-1]
+    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+        return "researcher_tools"
+    
+    if state.get("action_type") == "read_emails":
+        return END
+    else:
+        return "copywriter"
+
+# --- 3. Copywriter Agent ---
+class EmailDraft(BaseModel):
+    subject: str
+    body: str
+    to_email: str
+    to_name: str
+
+def copywriter_node(state: AgentState):
+    print("✍️ [Copywriter Agent] Drafting email...")
+    sys_msg = f"""You are the Copywriter Agent.
+Your job is to write an email draft based on the user's request.
+Extracted info: {state.get('extracted_info', '')}
+QA Feedback (if any): {state.get('qa_feedback', 'None')}
+
+Review the conversation and the contact info found by the Researcher.
+Write a professional email. 
+CRITICAL: If QA Feedback is present, you MUST adjust your draft to fix the issues mentioned by the QA agent!"""
+    
+    response = llm.with_structured_output(EmailDraft).invoke([SystemMessage(content=sys_msg)] + state["messages"])
+    
+    draft = {
+        "subject": response.subject,
+        "body": response.body,
+        "to": response.to_email,
+        "to_name": response.to_name
+    }
+    print(f"  -> Drafted email to {draft['to_name']}")
+    return {"draft_email": draft}
+
+# --- 4. QA / Reviewer Agent ---
+class QAResult(BaseModel):
+    passed: bool = Field(description="True if the email is perfect, False if it needs rewriting.")
+    feedback: str = Field(description="Detailed feedback if passed is False. Say 'Passed' if True.")
+
+def qa_node(state: AgentState):
+    print("🧐 [QA Agent] Reviewing draft...")
+    draft = state.get("draft_email", {})
+    sys_msg = f"""You are the QA / Reviewer Agent.
+Your job is to review the following email draft:
+To: {draft.get('to_name')} ({draft.get('to')})
+Subject: {draft.get('subject')}
+
+Body:
+{draft.get('body')}
+
+Criteria:
+1. No typos or grammatical errors.
+2. Professional tone appropriate for the workplace (especially if sending to a manager).
+3. Accurately reflects the user's intent.
+
+If it fails any of these, provide specific feedback on what needs to change. If it is perfect, set passed to True."""
+    
+    response = llm.with_structured_output(QAResult).invoke([SystemMessage(content=sys_msg)])
+    
+    if response.passed:
+        print("  -> Status: PASSED")
+        return {"qa_feedback": "Passed"}
+    else:
+        print(f"  -> Status: FAILED. Feedback: {response.feedback}")
+        return {"qa_feedback": response.feedback}
+
+def qa_router(state: AgentState):
+    if state.get("qa_feedback") == "Passed":
+        return "create_preview"
+    else:
+        return "copywriter"
+
+# --- 5. Output / Action Nodes ---
+def create_preview(state: AgentState):
+    print("👀 [System] Creating preview for user...")
+    draft = state.get("draft_email", {})
+    preview_text = f"📧 **Email Preview**\n\n**To:** {draft.get('to_name')} ({draft.get('to')})\n**Subject:** {draft.get('subject')}\n**Body:**\n{draft.get('body')}\n\n---\n✅ Type **'send'** to send\n❌ Type **'cancel'** to cancel\n✏️ Type **'edit'** to make changes"
+    
+    emails_to_send = [draft]
+    
+    return {
+        "messages": [AIMessage(content=preview_text)], 
+        "awaiting_approval": True, 
+        "emails_to_send": emails_to_send
+    }
+
+def send_emails_node(state: AgentState):
+    print("📤 [System] Sending emails...")
     results = []
-    headers = {"Authorization": f"Bearer {state['user_token']}"}
+    headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
     
-    for email in state["emails_to_send"]:
-        print(f"  Sending to {email['to_name']}...")
+    for email in state.get("emails_to_send", []):
         try:
             response = requests.post(
                 f"{BACKEND_URL}/send/",
@@ -434,104 +268,99 @@ def send_emails(state: EmailAgentState) -> EmailAgentState:
             )
             response.raise_for_status()
             results.append(f"✓ Sent to {email['to_name']} ({email['to']})")
-            print(f"    ✓ Email sent successfully")
+            print(f"  -> Success: {email['to']}")
         except Exception as e:
-            results.append(f"✗ Failed to send to {email['to_name']}: {str(e)}")
-            print(f"    ✗ Error: {e}")
-    
-    # Safely append to messages
-    if "messages" not in state or state["messages"] is None:
-        state["messages"] = []
-    
-    state["messages"] = list(state["messages"]) + [AIMessage(content="\n".join(results))]
-    print(f"✓ Completed sending {len(results)} emails")
-    return state
+            results.append(f"✗ Failed to send to {email.get('to_name')}: {e}")
+            print(f"  -> Failed: {e}")
+            
+    return {"messages": [AIMessage(content="\n".join(results))], "awaiting_approval": False}
 
-# Routing functions
-def route_by_action(state: EmailAgentState) -> str:
-    """Route to different workflows based on action type"""
-    action_type = state.get("action_type", "send_email")
-    
-    if action_type == "summarize_emails":
-        return "summarize"
-    else:
-        return "send_email"
+def cancel_node(state: AgentState):
+    print("🚫 [System] Action cancelled by user.")
+    return {"messages": [AIMessage(content="❌ Email action cancelled.")], "awaiting_approval": False}
 
-def should_ask_questions(state: EmailAgentState) -> str:
-    """Decide if we need to ask for more info or proceed to compose"""
-    if not state.get("conversation_complete", False):
-        return "ask_questions"
-    return "compose"
+# --- Entry Router ---
+def entry_router(state: AgentState):
+    if state.get("awaiting_approval"):
+        last_msg = state["messages"][-1].content.lower().strip()
+        if last_msg in ["send", "yes", "approve", "confirm", "ok"]:
+            return "send_emails"
+        elif last_msg in ["cancel", "no", "stop"]:
+            return "cancel_node"
+        else:
+            # Assume they want to edit the draft, pass back to Triage
+            # We also set awaiting_approval to false so it processes normally
+            return "triage"
+    return "triage"
 
-def should_send_or_wait(state: EmailAgentState) -> str:
-    """Decide if we should send emails or wait for approval"""
-    user_input = state.get("user_input", "").lower().strip()
-    
-    # Check if user approved
-    if user_input in ["send", "yes", "approve", "confirm", "ok"]:
-        return "send"
-    elif user_input in ["cancel", "no", "stop"]:
-        return "cancel"
-    else:
-        return "preview"
+def prepare_edit_node(state: AgentState):
+    # If editing, we reset approval state before hitting triage
+    return {"awaiting_approval": False}
 
-# Build the graph
+# --- Build the Graph ---
 def create_graph():
-    """Create and compile the LangGraph workflow with human-in-the-loop"""
-    workflow = StateGraph(EmailAgentState)
+    """Create and compile the Multi-Agent LangGraph workflow"""
+    workflow = StateGraph(AgentState)
     
     # Add nodes
-    workflow.add_node("detect_action_type", detect_action_type)
-    workflow.add_node("fetch_contacts", fetch_contacts)
-    workflow.add_node("analyze_intent", analyze_intent)
-    workflow.add_node("check_missing_info", check_missing_info)
-    workflow.add_node("compose_emails", compose_emails)
+    workflow.add_node("triage", triage_node)
+    workflow.add_node("researcher", researcher_node)
+    workflow.add_node("researcher_tools", researcher_tools_node)
+    workflow.add_node("copywriter", copywriter_node)
+    workflow.add_node("qa", qa_node)
     workflow.add_node("create_preview", create_preview)
-    workflow.add_node("send_emails", send_emails)
-    workflow.add_node("fetch_emails", fetch_emails)
-    workflow.add_node("summarize_emails", summarize_emails)
+    workflow.add_node("send_emails", send_emails_node)
+    workflow.add_node("cancel_node", cancel_node)
+    workflow.add_node("prepare_edit", prepare_edit_node)
     
-    # Define edges - Start with action detection
-    workflow.set_entry_point("detect_action_type")
-    
-    # Route based on action type
+    # Entry Point & Routing
     workflow.add_conditional_edges(
-        "detect_action_type",
-        route_by_action,
+        START,
+        entry_router,
         {
-            "summarize": "fetch_emails",
-            "send_email": "fetch_contacts"
+            "triage": "triage",
+            "send_emails": "send_emails",
+            "cancel_node": "cancel_node"
         }
     )
     
-    # Email summarization flow
-    workflow.add_edge("fetch_emails", "summarize_emails")
-    workflow.add_edge("summarize_emails", END)
-    
-    # Email sending flow (existing)
-    workflow.add_edge("fetch_contacts", "analyze_intent")
-    
-    # Conditional: ask questions or compose?
+    # Triage Agent Flow
     workflow.add_conditional_edges(
-        "analyze_intent",
-        should_ask_questions,
+        "triage",
+        triage_router,
         {
-            "ask_questions": "check_missing_info",
-            "compose": "compose_emails"
+            "researcher": "researcher",
+            END: END
         }
     )
     
-    # If asking questions, wait for user input (return to END)
-    workflow.add_edge("check_missing_info", END)
+    # Researcher Agent Flow
+    workflow.add_conditional_edges(
+        "researcher",
+        researcher_router,
+        {
+            "researcher_tools": "researcher_tools",
+            "copywriter": "copywriter",
+            END: END
+        }
+    )
+    workflow.add_edge("researcher_tools", "researcher")
     
-    # After composing, show preview
-    workflow.add_edge("compose_emails", "create_preview")
+    # Copywriter & QA Flow
+    workflow.add_edge("copywriter", "qa")
+    workflow.add_conditional_edges(
+        "qa",
+        qa_router,
+        {
+            "copywriter": "copywriter",
+            "create_preview": "create_preview"
+        }
+    )
     
-    # Preview waits for approval (return to END)
+    # Output Nodes
     workflow.add_edge("create_preview", END)
-    
-    # When user approves, send emails
     workflow.add_edge("send_emails", END)
+    workflow.add_edge("cancel_node", END)
     
     return workflow.compile()
 
